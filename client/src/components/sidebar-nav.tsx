@@ -2,10 +2,10 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { 
-  FolderOpen, 
-  Database, 
   LayoutDashboard,
-  GitGraph
+  FolderOpen, 
+  Database,
+  GitGraph,
 } from "lucide-react";
 
 const navItems = [
