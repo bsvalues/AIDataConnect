@@ -32,7 +32,7 @@ const BaseNode = memo(({ data, children, className }: BaseNodeProps) => {
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="p-4">
+      <CardContent className="p-4 pt-0">
         {children}
       </CardContent>
     </Card>
@@ -52,7 +52,6 @@ export const TransformNode = memo(({ data, ...props }: NodeProps) => {
 
   const handleApplyTransformation = (newTransform: string) => {
     setTransformation(newTransform);
-    // Update node data
     data.config = {
       ...data.config,
       transformation: newTransform
@@ -63,18 +62,18 @@ export const TransformNode = memo(({ data, ...props }: NodeProps) => {
     <BaseNode data={data} {...props} className="border-green-500">
       <Handle type="target" position={Position.Left} />
       <div className="space-y-2">
-        <div className="text-xs mb-2">Transform Data</div>
+        <div className="text-xs">Transform Data</div>
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" size="sm" className="w-full">
-              {transformation ? 'Edit Transform' : 'Add Transform'}
+              {transformation ? 'Edit Transform' : 'Configure Transform'}
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[800px]">
+          <DialogContent className="sm:max-w-[800px] h-[80vh]">
             <DialogHeader>
-              <DialogTitle>Data Transformation</DialogTitle>
+              <DialogTitle>Configure Data Transformation</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto max-h-[calc(80vh-100px)]">
               <div className="space-y-2">
                 <Label>Current Transformation</Label>
                 <Textarea
@@ -94,7 +93,7 @@ export const TransformNode = memo(({ data, ...props }: NodeProps) => {
           </DialogContent>
         </Dialog>
         {transformation && (
-          <div className="text-xs bg-muted p-2 rounded max-h-[100px] overflow-auto">
+          <div className="text-xs bg-muted p-2 rounded overflow-auto max-h-[80px]">
             <code>{transformation}</code>
           </div>
         )}
