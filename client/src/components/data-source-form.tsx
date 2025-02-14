@@ -55,6 +55,12 @@ const sourceTypes = [
   }
 ];
 
+const sqlDialects = [
+  { value: "sqlserver", label: "SQL Server", icon: Database },
+  { value: "postgres", label: "PostgreSQL", icon: Database },
+  { value: "mysql", label: "MySQL", icon: Database }
+];
+
 export function DataSourceForm() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -68,12 +74,15 @@ export function DataSourceForm() {
       config: {
         type: "sql",
         config: {
+          dialect: "sqlserver",
           host: "",
-          port: 5432,
+          port: 1433,
           database: "",
           username: "",
           password: "",
-          ssl: false
+          encrypt: true,
+          trustedConnection: false,
+          instanceName: ""
         }
       },
       userId: 1 // Mock user ID
@@ -109,20 +118,72 @@ export function DataSourceForm() {
           <>
             <FormField
               control={form.control}
-              name="config.config.host"
+              name="config.config.dialect"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Host</FormLabel>
-                  <FormControl>
-                    <div className="flex items-center space-x-2">
-                      <Server className="w-4 h-4 text-muted-foreground" />
-                      <Input placeholder="localhost" {...field} />
-                    </div>
-                  </FormControl>
+                  <FormLabel>Database Type</FormLabel>
+                  <Select 
+                    onValueChange={field.onChange} 
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select database type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {sqlDialects.map((dialect) => (
+                        <SelectItem key={dialect.value} value={dialect.value}>
+                          <div className="flex items-center gap-2">
+                            <dialect.icon className="w-4 h-4" />
+                            <span>{dialect.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="config.config.host"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Server Name/IP</FormLabel>
+                  <FormControl>
+                    <div className="flex items-center space-x-2">
+                      <Server className="w-4 h-4 text-muted-foreground" />
+                      <Input placeholder="localhost or server name" {...field} />
+                    </div>
+                  </FormControl>
+                  <FormDescription>
+                    For SQL Server, you can use server name or IP address
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="config.config.instanceName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Instance Name (Optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="SQLEXPRESS" {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    Leave empty for default instance
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name="config.config.port"
@@ -132,7 +193,7 @@ export function DataSourceForm() {
                   <FormControl>
                     <Input 
                       type="number" 
-                      placeholder="5432" 
+                      placeholder="1433" 
                       {...field} 
                       onChange={e => field.onChange(parseInt(e.target.value))}
                     />
@@ -141,6 +202,7 @@ export function DataSourceForm() {
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
               name="config.config.database"
@@ -150,54 +212,82 @@ export function DataSourceForm() {
                   <FormControl>
                     <div className="flex items-center space-x-2">
                       <Database className="w-4 h-4 text-muted-foreground" />
-                      <Input placeholder="mydb" {...field} />
+                      <Input placeholder="master" {...field} />
                     </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
-              name="config.config.username"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Username</FormLabel>
-                  <FormControl>
-                    <div className="flex items-center space-x-2">
-                      <User className="w-4 h-4 text-muted-foreground" />
-                      <Input placeholder="postgres" {...field} />
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="config.config.password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <div className="flex items-center space-x-2">
-                      <Lock className="w-4 h-4 text-muted-foreground" />
-                      <Input type="password" {...field} />
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="config.config.ssl"
+              name="config.config.trustedConnection"
               render={({ field }) => (
                 <FormItem className="flex items-center justify-between space-y-0 rounded-lg border p-4">
                   <div className="space-y-0.5">
-                    <FormLabel>SSL Connection</FormLabel>
+                    <FormLabel>Windows Authentication</FormLabel>
                     <FormDescription>
-                      Use SSL/TLS for secure database connection
+                      Use Windows integrated security
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {!form.watch("config.config.trustedConnection") && (
+              <>
+                <FormField
+                  control={form.control}
+                  name="config.config.username"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Username</FormLabel>
+                      <FormControl>
+                        <div className="flex items-center space-x-2">
+                          <User className="w-4 h-4 text-muted-foreground" />
+                          <Input placeholder="sa" {...field} />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="config.config.password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <div className="flex items-center space-x-2">
+                          <Lock className="w-4 h-4 text-muted-foreground" />
+                          <Input type="password" {...field} />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
+            )}
+
+            <FormField
+              control={form.control}
+              name="config.config.encrypt"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between space-y-0 rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel>Encrypt Connection</FormLabel>
+                    <FormDescription>
+                      Use encryption for data sent between client and server
                     </FormDescription>
                   </div>
                   <FormControl>

@@ -35,12 +35,17 @@ export const dataSources = pgTable("data_sources", {
 
 // Data source configuration schemas
 export const sqlConfigSchema = z.object({
+  dialect: z.enum(["postgres", "mysql", "sqlserver"]),
   host: z.string().min(1, "Host is required"),
   port: z.number().int().positive("Port must be a positive number"),
   database: z.string().min(1, "Database name is required"),
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
   ssl: z.boolean().optional(),
+  domain: z.string().optional(), // For Windows authentication
+  instanceName: z.string().optional(), // For named SQL Server instances
+  trustedConnection: z.boolean().optional(), // For Windows authentication
+  encrypt: z.boolean().optional().default(true), // For SQL Server security
 });
 
 export const apiConfigSchema = z.object({
