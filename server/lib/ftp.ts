@@ -6,8 +6,9 @@ import path from "path";
 import fs from "fs/promises";
 
 // FTP Server configuration
+const tryPorts = [2121, 2122, 2123, 2124];
 const ftpServer = new FtpSrv({
-  url: process.env.FTP_URL || "ftp://0.0.0.0:2121",
+  url: process.env.FTP_URL || `ftp://0.0.0.0:${tryPorts[0]}`,
   anonymous: false,
   greeting: ["Welcome to RAG Drive FTP Server"],
   pasv_url: process.env.PASV_URL || "127.0.0.1",
@@ -42,16 +43,23 @@ ftpServer.on("client-error", ({ connection, context, error }) => {
 
 // Start FTP server
 export async function startFtpServer() {
-  try {
-    await ftpServer.listen();
-    console.log("FTP Server is running on port 2121");
-  } catch (err) {
-    if (err.code === 'EADDRINUSE') {
-      console.warn("FTP port 2121 is in use, skipping FTP server startup");
-      return; // Continue app startup without FTP server
+  for (const port of tryPorts) {
+    try {
+      ftpServer.url = `ftp://0.0.0.0:${port}`;
+      await ftpServer.listen();
+      console.log(`FTP Server is running on port ${port}`);
+      return;
+    } catch (err) {
+      if (err.code === 'EADDRINUSE') {
+        if (port === tryPorts[tryPorts.length - 1]) {
+          console.warn("All FTP ports in use, skipping FTP server startup");
+          return;
+        }
+        continue;
+      }
+      console.error("Error starting FTP server:", err);
+      throw err;
     }
-    console.error("Error starting FTP server:", err);
-    throw err;
   }
 }
 
