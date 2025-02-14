@@ -2,7 +2,7 @@ import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import { storage } from "./storage";
-import { analyzeFile, searchFiles, suggestTransformations, processDocumentForRag, findSimilarChunks, generateRagResponse } from "./lib/openai";
+import { analyzeFile, searchFiles, suggestTransformations, processDocumentForRag, findSimilarChunks, generateRagResponse, analyzeRagPerformance } from "./lib/openai";
 import { insertFileSchema, insertDataSourceSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import fs from "fs/promises";
@@ -189,7 +189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/rag/process", async (req, res) => {
     try {
-      const { fileId } = req.body;
+      const { fileId, config } = req.body;
       if (!fileId) {
         return res.status(400).json({ message: "File ID is required" });
       }
@@ -206,17 +206,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Error reading file" });
       }
 
-      const embeddings = await processDocumentForRag(content);
+      const embeddings = await processDocumentForRag(content, config);
 
       for (const embedding of embeddings) {
         await storage.createEmbedding({
           fileId: file.id,
           chunk: embedding.text,
-          embedding: embedding.vector
+          vector: JSON.stringify(embedding.vector)
         });
       }
 
-      res.json({ message: "Document processed successfully", chunks: embeddings.length });
+      res.json({
+        message: "Document processed successfully",
+        chunks: embeddings.length
+      });
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
     }
@@ -224,27 +227,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/rag/query", async (req, res) => {
     try {
-      const { query, fileIds } = req.body;
+      const { query, fileIds, config } = req.body;
       if (!query) {
         return res.status(400).json({ message: "Query is required" });
       }
 
       const fileEmbeddings = await storage.getEmbeddingsByFileIds(fileIds || []);
+      const similarChunks = await findSimilarChunks(query, fileEmbeddings, config);
+      const response = await generateRagResponse(query, similarChunks, config);
 
-      const similarChunks = await findSimilarChunks(query, fileEmbeddings);
-
-      const response = await generateRagResponse(query, similarChunks);
+      // Analyze RAG performance
+      const performance = await analyzeRagPerformance(query, similarChunks, response);
 
       res.json({
         response,
-        context: similarChunks
+        context: similarChunks,
+        performance
       });
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
     }
   });
 
-  // Add pipeline endpoints
   app.post("/api/pipelines", async (req, res) => {
     try {
       const pipelineData = {

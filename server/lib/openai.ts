@@ -4,14 +4,32 @@ import type { RagEmbedding } from "@shared/schema";
 // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Chunk size for text splitting
-const CHUNK_SIZE = 1000;
-const CHUNK_OVERLAP = 200;
+// Enhanced configuration for RAG
+interface RagConfig {
+  chunkSize: number;
+  chunkOverlap: number;
+  maxTokens: number;
+  temperature: number;
+  topK: number;
+  modelName: string;
+  embeddingModel: string;
+}
 
+const DEFAULT_RAG_CONFIG: RagConfig = {
+  chunkSize: 1000,
+  chunkOverlap: 200,
+  maxTokens: 500,
+  temperature: 0.7,
+  topK: 3,
+  modelName: "gpt-4o",
+  embeddingModel: "text-embedding-3-large"
+};
 
-export async function generateEmbedding(text: string): Promise<number[]> {
+export async function generateEmbedding(text: string, config: Partial<RagConfig> = {}): Promise<number[]> {
+  const finalConfig = { ...DEFAULT_RAG_CONFIG, ...config };
+
   const response = await openai.embeddings.create({
-    model: "text-embedding-3-large",
+    model: finalConfig.embeddingModel,
     input: text,
     encoding_format: "float",
   });
@@ -19,7 +37,8 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   return response.data[0].embedding;
 }
 
-function splitIntoChunks(text: string): string[] {
+function splitIntoChunks(text: string, config: Partial<RagConfig> = {}): string[] {
+  const finalConfig = { ...DEFAULT_RAG_CONFIG, ...config };
   const words = text.split(' ');
   const chunks: string[] = [];
   let currentChunk: string[] = [];
@@ -27,10 +46,10 @@ function splitIntoChunks(text: string): string[] {
 
   for (let i = 0; i < words.length; i++) {
     const word = words[i];
-    if (currentLength + word.length > CHUNK_SIZE) {
+    if (currentLength + word.length > finalConfig.chunkSize) {
       chunks.push(currentChunk.join(' '));
       // Keep last CHUNK_OVERLAP worth of words for context
-      const overlapStart = Math.max(0, currentChunk.length - CHUNK_OVERLAP);
+      const overlapStart = Math.max(0, currentChunk.length - finalConfig.chunkOverlap);
       currentChunk = currentChunk.slice(overlapStart);
       currentLength = currentChunk.join(' ').length;
     }
@@ -43,22 +62,31 @@ function splitIntoChunks(text: string): string[] {
   return chunks;
 }
 
-export async function processDocumentForRag(content: string): Promise<RagEmbedding[]> {
-  const chunks = splitIntoChunks(content);
+export async function processDocumentForRag(
+  content: string, 
+  config: Partial<RagConfig> = {}
+): Promise<RagEmbedding[]> {
+  const finalConfig = { ...DEFAULT_RAG_CONFIG, ...config };
+  const chunks = splitIntoChunks(content, finalConfig);
   const embeddings: RagEmbedding[] = [];
 
   for (const chunk of chunks) {
-    const vector = await generateEmbedding(chunk);
+    const vector = await generateEmbedding(chunk, finalConfig);
     embeddings.push({ text: chunk, vector });
   }
 
   return embeddings;
 }
 
-export async function findSimilarChunks(query: string, embeddings: RagEmbedding[], topK: number = 3): Promise<string[]> {
-  const queryVector = await generateEmbedding(query);
+export async function findSimilarChunks(
+  query: string, 
+  embeddings: RagEmbedding[], 
+  config: Partial<RagConfig> = {}
+): Promise<string[]> {
+  const finalConfig = { ...DEFAULT_RAG_CONFIG, ...config };
+  const queryVector = await generateEmbedding(query, finalConfig);
 
-  // Calculate cosine similarity
+  // Calculate cosine similarity with custom top-k
   const similarities = embeddings.map(embedding => ({
     text: embedding.text,
     similarity: cosineSimilarity(queryVector, embedding.vector)
@@ -67,7 +95,7 @@ export async function findSimilarChunks(query: string, embeddings: RagEmbedding[
   // Sort by similarity and get top K results
   return similarities
     .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, topK)
+    .slice(0, finalConfig.topK)
     .map(result => result.text);
 }
 
@@ -78,22 +106,66 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dotProduct / (magnitudeA * magnitudeB);
 }
 
-export async function generateRagResponse(query: string, context: string[]): Promise<string> {
+export async function generateRagResponse(
+  query: string, 
+  context: string[],
+  config: Partial<RagConfig> = {}
+): Promise<string> {
+  const finalConfig = { ...DEFAULT_RAG_CONFIG, ...config };
+
   const response = await openai.chat.completions.create({
-    model: "gpt-4o",
+    model: finalConfig.modelName,
     messages: [
       {
         role: "system",
-        content: "You are a helpful assistant. Use the provided context to answer questions accurately. If you cannot find the answer in the context, say so."
+        content: `You are a helpful assistant with access to a knowledge base. 
+                 Use the provided context to answer questions accurately. 
+                 If you cannot find the answer in the context, say so.
+                 Always cite the relevant parts of the context in your response.`
       },
       {
         role: "user",
         content: `Context:\n${context.join('\n\n')}\n\nQuestion: ${query}`
       }
-    ]
+    ],
+    max_tokens: finalConfig.maxTokens,
+    temperature: finalConfig.temperature
   });
 
   return response.choices[0].message.content || "Failed to generate response";
+}
+
+// Analytics for RAG performance
+export async function analyzeRagPerformance(
+  query: string,
+  selectedContext: string[],
+  response: string
+): Promise<{
+  contextRelevance: number;
+  responseQuality: number;
+  suggestedImprovements: string[];
+}> {
+  const analysisResponse = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content: "Analyze the RAG system's performance by examining the query, selected context, and response. Provide scores and suggestions in JSON format."
+      },
+      {
+        role: "user",
+        content: JSON.stringify({ query, context: selectedContext, response })
+      }
+    ],
+    response_format: { type: "json_object" }
+  });
+
+  const analysis = JSON.parse(analysisResponse.choices[0].message.content || "{}");
+  return {
+    contextRelevance: analysis.contextRelevance || 0,
+    responseQuality: analysis.responseQuality || 0,
+    suggestedImprovements: analysis.suggestedImprovements || []
+  };
 }
 
 export async function analyzeFile(content: string): Promise<{
