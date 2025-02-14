@@ -1,9 +1,18 @@
-import { memo, type ReactNode } from 'react';
+import { memo, type ReactNode, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { TransformationSuggestions } from './transformation-suggestions';
+import { Textarea } from '@/components/ui/textarea';
 
 interface BaseNodeProps extends NodeProps {
   children?: ReactNode;
@@ -35,13 +44,61 @@ export const SourceNode = memo(({ data, ...props }: NodeProps) => (
   </BaseNode>
 ));
 
-export const TransformNode = memo(({ data, ...props }: NodeProps) => (
-  <BaseNode data={data} {...props} className="border-green-500">
-    <Handle type="target" position={Position.Left} />
-    <div className="text-xs">Transform Data</div>
-    <Handle type="source" position={Position.Right} />
-  </BaseNode>
-));
+export const TransformNode = memo(({ data, ...props }: NodeProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [transformation, setTransformation] = useState(data.config?.transformation || '');
+
+  const handleApplyTransformation = (newTransform: string) => {
+    setTransformation(newTransform);
+    // Update node data
+    if (props.data) {
+      props.data.config = {
+        ...props.data.config,
+        transformation: newTransform
+      };
+    }
+  };
+
+  return (
+    <BaseNode data={data} {...props} className="border-green-500">
+      <Handle type="target" position={Position.Left} />
+      <div className="space-y-2">
+        <div className="text-xs mb-2">Transform Data</div>
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full">
+              Edit Transform
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Data Transformation</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Textarea
+                value={transformation}
+                onChange={(e) => handleApplyTransformation(e.target.value)}
+                placeholder="Enter transformation code..."
+                className="font-mono text-sm"
+                rows={5}
+              />
+              <TransformationSuggestions
+                data={props.data?.inputData}
+                onApply={handleApplyTransformation}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+        {transformation && (
+          <div className="text-xs bg-muted p-2 rounded max-h-[100px] overflow-auto">
+            <code>{transformation}</code>
+          </div>
+        )}
+      </div>
+      <Handle type="source" position={Position.Right} />
+    </BaseNode>
+  );
+});
 
 export const FilterNode = memo(({ data, ...props }: NodeProps) => (
   <BaseNode data={data} {...props} className="border-yellow-500">
