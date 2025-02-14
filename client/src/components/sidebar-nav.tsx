@@ -5,7 +5,7 @@ import {
   FolderOpen, 
   Database, 
   LayoutDashboard,
-  Settings
+  GitGraph
 } from "lucide-react";
 
 const navItems = [
@@ -23,6 +23,11 @@ const navItems = [
     title: "Data Sources",
     href: "/data-sources",
     icon: Database
+  },
+  {
+    title: "Data Pipelines",
+    href: "/pipelines",
+    icon: GitGraph
   }
 ];
 

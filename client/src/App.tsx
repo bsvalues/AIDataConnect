@@ -7,6 +7,7 @@ import Dashboard from "@/pages/dashboard";
 import FileExplorer from "@/pages/file-explorer";
 import DataSources from "@/pages/data-sources";
 import NotFound from "@/pages/not-found";
+import PipelineBuilder from "@/pages/pipeline-builder";
 
 function Router() {
   return (
@@ -22,6 +23,7 @@ function Router() {
           <Route path="/" component={Dashboard} />
           <Route path="/files" component={FileExplorer} />
           <Route path="/data-sources" component={DataSources} />
+          <Route path="/pipelines" component={PipelineBuilder} />
           <Route component={NotFound} />
         </Switch>
       </main>

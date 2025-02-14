@@ -129,3 +129,55 @@ export interface RagEmbedding {
 
 export type Embedding = typeof embeddings.$inferSelect;
 export type InsertEmbedding = typeof embeddings.$inferInsert;
+
+
+// Pipeline types
+export const pipelineNodeTypes = [
+  "source",
+  "transform",
+  "filter",
+  "join",
+  "output"
+] as const;
+
+export const pipelineNodeSchema = z.object({
+  id: z.string(),
+  type: z.enum(pipelineNodeTypes),
+  position: z.object({
+    x: z.number(),
+    y: z.number()
+  }),
+  data: z.object({
+    label: z.string(),
+    config: z.record(z.any()).optional()
+  })
+});
+
+export const pipelineEdgeSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  target: z.string()
+});
+
+export const pipelineSchema = z.object({
+  id: serial("id").primaryKey(),
+  name: z.string(),
+  nodes: z.array(pipelineNodeSchema),
+  edges: z.array(pipelineEdgeSchema),
+  userId: z.number(),
+  createdAt: z.date().optional()
+});
+
+export const pipelines = pgTable("pipelines", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  nodes: jsonb("nodes").$type<z.infer<typeof pipelineNodeSchema>[]>(),
+  edges: jsonb("edges").$type<z.infer<typeof pipelineEdgeSchema>[]>(),
+  userId: integer("user_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow()
+});
+
+export type Pipeline = typeof pipelines.$inferSelect;
+export type InsertPipeline = typeof pipelines.$inferInsert;
+export type PipelineNode = z.infer<typeof pipelineNodeSchema>;
+export type PipelineEdge = z.infer<typeof pipelineEdgeSchema>;
