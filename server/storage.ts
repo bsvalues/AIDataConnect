@@ -115,9 +115,12 @@ export class MemStorage implements IStorage {
     const source: DataSource = {
       id,
       ...insertSource,
-      config: insertSource.config || null,
+      status: "pending", // Set initial status
       createdAt: new Date()
     };
+
+    console.log('Creating data source:', source);
+
     this.dataSources.set(id, source);
     return source;
   }

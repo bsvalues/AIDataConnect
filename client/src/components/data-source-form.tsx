@@ -91,8 +91,10 @@ export function DataSourceForm() {
 
   const createMutation = useMutation({
     mutationFn: async (values: InsertDataSource) => {
+      console.log('Submitting data source:', values);
       const res = await apiRequest("POST", "/api/data-sources", values);
-      return res.json();
+      const data = await res.json();
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/data-sources"] });
@@ -103,6 +105,7 @@ export function DataSourceForm() {
       form.reset();
     },
     onError: (error: Error) => {
+      console.error('Data source creation error:', error);
       toast({
         title: "Error creating data source",
         description: error.message,
@@ -308,9 +311,17 @@ export function DataSourceForm() {
     }
   };
 
+  async function onSubmit(values: InsertDataSource) {
+    try {
+      await createMutation.mutate(values);
+    } catch (error) {
+      console.error('Form submission error:', error);
+    }
+  }
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit((values) => createMutation.mutate(values))} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <FormField
           control={form.control}
           name="name"
@@ -335,7 +346,6 @@ export function DataSourceForm() {
                 onValueChange={(value) => {
                   field.onChange(value);
                   setSourceType(value);
-                  // Reset form when changing type
                   form.reset({
                     ...form.getValues(),
                     config: {
