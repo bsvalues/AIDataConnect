@@ -3,7 +3,8 @@ import {
   type File, type InsertFile,
   type DataSource, type InsertDataSource,
   type Embedding, type InsertEmbedding,
-  type RagEmbedding
+  type RagEmbedding,
+  type Pipeline, type InsertPipeline
 } from "@shared/schema";
 
 export interface IStorage {
@@ -28,6 +29,13 @@ export interface IStorage {
   // Embedding operations
   createEmbedding(embedding: InsertEmbedding): Promise<Embedding>;
   getEmbeddingsByFileIds(fileIds: number[]): Promise<RagEmbedding[]>;
+
+  // Pipeline operations
+  createPipeline(pipeline: InsertPipeline): Promise<Pipeline>;
+  getPipeline(id: number): Promise<Pipeline | undefined>;
+  getPipelinesByUser(userId: number): Promise<Pipeline[]>;
+  updatePipeline(id: number, updates: Partial<Pipeline>): Promise<Pipeline>;
+  deletePipeline(id: number): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -35,11 +43,13 @@ export class MemStorage implements IStorage {
   private files: Map<number, File>;
   private dataSources: Map<number, DataSource>;
   private embeddings: Map<number, Embedding>;
+  private pipelines: Map<number, Pipeline>;
   private currentIds: { 
     users: number; 
     files: number; 
     dataSources: number;
     embeddings: number;
+    pipelines: number;
   };
 
   constructor() {
@@ -47,11 +57,13 @@ export class MemStorage implements IStorage {
     this.files = new Map();
     this.dataSources = new Map();
     this.embeddings = new Map();
+    this.pipelines = new Map();
     this.currentIds = { 
       users: 1, 
       files: 1, 
       dataSources: 1,
-      embeddings: 1 
+      embeddings: 1,
+      pipelines: 1
     };
   }
 
@@ -169,6 +181,46 @@ export class MemStorage implements IStorage {
         text: embedding.chunk,
         vector: JSON.parse(embedding.vector)
       }));
+  }
+
+  // Pipeline operations
+  async createPipeline(insertPipeline: InsertPipeline): Promise<Pipeline> {
+    const id = this.currentIds.pipelines++;
+    const pipeline: Pipeline = {
+      id,
+      ...insertPipeline,
+      createdAt: new Date()
+    };
+    this.pipelines.set(id, pipeline);
+    return pipeline;
+  }
+
+  async getPipeline(id: number): Promise<Pipeline | undefined> {
+    return this.pipelines.get(id);
+  }
+
+  async getPipelinesByUser(userId: number): Promise<Pipeline[]> {
+    return Array.from(this.pipelines.values()).filter(
+      (pipeline) => pipeline.userId === userId
+    );
+  }
+
+  async updatePipeline(id: number, updates: Partial<Pipeline>): Promise<Pipeline> {
+    const pipeline = await this.getPipeline(id);
+    if (!pipeline) throw new Error("Pipeline not found");
+
+    const updated: Pipeline = {
+      ...pipeline,
+      ...updates,
+      nodes: updates.nodes ?? pipeline.nodes,
+      edges: updates.edges ?? pipeline.edges
+    };
+    this.pipelines.set(id, updated);
+    return updated;
+  }
+
+  async deletePipeline(id: number): Promise<void> {
+    this.pipelines.delete(id);
   }
 }
 

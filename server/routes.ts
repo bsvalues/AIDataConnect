@@ -244,6 +244,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Add pipeline endpoints
+  app.post("/api/pipelines", async (req, res) => {
+    try {
+      const pipelineData = {
+        ...req.body,
+        userId: 1 // Mock user ID
+      };
+      const pipeline = await storage.createPipeline(pipelineData);
+      res.json(pipeline);
+    } catch (error) {
+      res.status(400).json({ message: handleError(error) });
+    }
+  });
+
+  app.get("/api/pipelines", async (req, res) => {
+    try {
+      const pipelines = await storage.getPipelinesByUser(1);
+      res.json(pipelines);
+    } catch (error) {
+      res.status(500).json({ message: handleError(error) });
+    }
+  });
+
+  app.get("/api/pipelines/:id", async (req, res) => {
+    try {
+      const pipeline = await storage.getPipeline(parseInt(req.params.id));
+      if (!pipeline) return res.status(404).json({ message: "Pipeline not found" });
+      res.json(pipeline);
+    } catch (error) {
+      res.status(500).json({ message: handleError(error) });
+    }
+  });
+
+  app.patch("/api/pipelines/:id", async (req, res) => {
+    try {
+      const pipeline = await storage.updatePipeline(parseInt(req.params.id), req.body);
+      res.json(pipeline);
+    } catch (error) {
+      res.status(500).json({ message: handleError(error) });
+    }
+  });
+
+  app.delete("/api/pipelines/:id", async (req, res) => {
+    try {
+      await storage.deletePipeline(parseInt(req.params.id));
+      res.status(204).end();
+    } catch (error) {
+      res.status(500).json({ message: handleError(error) });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
