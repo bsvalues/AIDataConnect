@@ -224,11 +224,24 @@ export async function suggestTransformations(data: any): Promise<Array<{
     messages: [
       {
         role: "system",
-        content: "Suggest data transformations based on the provided data structure. Return array of transformation objects."
+        content: `You are an expert data transformation assistant. Analyze the provided data and suggest useful transformations.
+        For each suggestion, provide:
+        - A clear name describing the transformation
+        - A brief description explaining what it does and why it's useful
+        - The actual transformation code that can be applied
+
+        Focus on common data operations like:
+        - Data cleaning and standardization
+        - Type conversions
+        - Filtering and validation
+        - Aggregations and calculations
+        - Format transformations
+
+        Return an array of transformation objects in JSON format.`
       },
       {
         role: "user",
-        content: JSON.stringify(data)
+        content: JSON.stringify({ data, schema: data?._schema || {} })
       }
     ],
     response_format: { type: "json_object" }

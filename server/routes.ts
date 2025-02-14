@@ -178,8 +178,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { data } = req.body;
       if (!data) {
-        return res.status(400).json({ message: "Data is required" });
+        return res.status(400).json({ message: "Data is required for analysis" });
       }
+
       const suggestions = await suggestTransformations(data);
       res.json(suggestions);
     } catch (error) {
@@ -236,7 +237,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const similarChunks = await findSimilarChunks(query, fileEmbeddings, config);
       const response = await generateRagResponse(query, similarChunks, config);
 
-      // Analyze RAG performance
       const performance = await analyzeRagPerformance(query, similarChunks, response);
 
       res.json({
