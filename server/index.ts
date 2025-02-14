@@ -39,31 +39,39 @@ app.use((req, res, next) => {
 
 (async () => {
   try {
-    // Temporarily comment out FTP server start for debugging
-    // await startFtpServer();
+    // Start FTP server first
+    log("Starting FTP server...");
+    await startFtpServer();
+    log("FTP server started successfully on port 2121");
 
+    log("Registering Express routes...");
     const server = await registerRoutes(app);
+    log("Express routes registered successfully");
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
-
+      log(`Error: ${status} - ${message}`);
       res.status(status).json({ message });
       throw err;
     });
 
     if (app.get("env") === "development") {
+      log("Setting up Vite middleware...");
       await setupVite(app, server);
+      log("Vite middleware setup complete");
     } else {
       serveStatic(app);
     }
 
-    const PORT = 3000; 
-    server.listen(PORT, "0.0.0.0", () => {
-      log(`serving on port ${PORT}`);
+    // Use port 5000 to match workflow expectations
+    const PORT = process.env.PORT ? parseInt(process.env.PORT) : 5000;
+
+    server.listen(PORT, () => {
+      log(`Web server started successfully on http://0.0.0.0:${PORT}`);
     });
   } catch (error) {
-    console.error("Error starting servers:", error);
+    console.error("Server startup error:", error);
     process.exit(1);
   }
 })();
