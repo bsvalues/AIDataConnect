@@ -110,8 +110,8 @@ function PipelineBuilder() {
   );
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex items-center justify-between mb-8">
+    <div className="flex flex-col h-[calc(100vh-6rem)] gap-6">
+      <div className="flex items-center justify-between">
         <div className="space-y-2">
           <Label htmlFor="pipeline-name">Pipeline Name</Label>
           <Input
@@ -130,7 +130,7 @@ function PipelineBuilder() {
         </Button>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex gap-6 flex-1">
         <div className="w-48 space-y-4">
           <h2 className="font-semibold">Nodes</h2>
           <div className="space-y-2">
@@ -150,7 +150,7 @@ function PipelineBuilder() {
           </div>
         </div>
 
-        <div className="flex-1 border rounded-lg" style={{ height: '70vh' }}>
+        <div className="flex-1 border rounded-lg bg-background/50">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -171,5 +171,4 @@ function PipelineBuilder() {
   );
 }
 
-// Make sure to export the component as default
 export default PipelineBuilder;
