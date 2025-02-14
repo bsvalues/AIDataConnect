@@ -67,9 +67,21 @@ app.use((req, res, next) => {
     // Use port 5000 to match workflow expectations
     const PORT = process.env.PORT ? parseInt(process.env.PORT) : 5000;
 
-    server.listen(PORT, () => {
-      log(`Web server started successfully on http://0.0.0.0:${PORT}`);
-    });
+    server.listen(PORT)
+      .on('error', (error: any) => {
+        if (error.code === 'EADDRINUSE') {
+          log(`Port ${PORT} is in use, trying ${PORT + 1}...`);
+          server.listen(PORT + 1);
+        } else {
+          console.error('Server startup error:', error);
+          process.exit(1);
+        }
+      })
+      .on('listening', () => {
+        const addr = server.address();
+        const actualPort = typeof addr === 'object' ? addr?.port : PORT;
+        log(`Web server started successfully on http://0.0.0.0:${actualPort}`);
+      });
   } catch (error) {
     console.error("Server startup error:", error);
     process.exit(1);
