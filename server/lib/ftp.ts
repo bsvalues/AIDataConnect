@@ -7,18 +7,20 @@ import fs from "fs/promises";
 
 // FTP Server configuration
 const ftpServer = new FtpSrv({
-  url: "ftp://0.0.0.0:21",
+  url: "ftp://0.0.0.0:2121", // Change port to avoid conflict with other services
   anonymous: false,
   greeting: ["Welcome to RAG Drive FTP Server"],
-  tls: true,
   pasv_url: process.env.PASV_URL || "127.0.0.1",
+  pasv_min: 1024,
+  pasv_max: 2048,
 });
 
 // Handle FTP authentication
 ftpServer.on("login", async ({ username, password }, resolve, reject) => {
   // TODO: Replace with actual user authentication
   if (username === "admin" && password === "password") {
-    resolve({ root: "./uploads" });
+    const uploadsDir = await ensureUploadsDirectory();
+    resolve({ root: uploadsDir });
   } else {
     reject(new Error("Invalid credentials"));
   }
@@ -28,7 +30,7 @@ ftpServer.on("login", async ({ username, password }, resolve, reject) => {
 export async function startFtpServer() {
   try {
     await ftpServer.listen();
-    console.log("FTP Server is running");
+    console.log("FTP Server is running on port 2121");
   } catch (err) {
     console.error("Error starting FTP server:", err);
     throw err;
@@ -51,7 +53,7 @@ export class FtpClient {
         port,
         user,
         password,
-        secure: true
+        secure: false // Set to false initially to test basic connectivity
       });
     } catch (error) {
       console.error("FTP connection error:", error);
