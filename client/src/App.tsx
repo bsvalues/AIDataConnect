@@ -1,3 +1,4 @@
+
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -23,7 +24,7 @@ function Router() {
           <Route path="/" component={Dashboard} />
           <Route path="/files" component={FileExplorer} />
           <Route path="/data-sources" component={DataSources} />
-          <Route path="/pipelines" component={PipelineBuilder} />
+          <Route path="/pipeline" component={PipelineBuilder} />
           <Route component={NotFound} />
         </Switch>
       </main>

@@ -1,3 +1,4 @@
+
 import { memo, type ReactNode, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -39,14 +40,14 @@ const BaseNode = memo(({ data, children, className }: BaseNodeProps) => {
   );
 });
 
-export const SourceNode = memo(({ data, ...props }: NodeProps) => (
+const SourceNode = memo(({ data, ...props }: NodeProps) => (
   <BaseNode data={data} {...props} className="border-blue-500">
     <Handle type="source" position={Position.Right} />
     <div className="text-xs">Data Source</div>
   </BaseNode>
 ));
 
-export const TransformNode = memo(({ data, ...props }: NodeProps) => {
+const TransformNode = memo(({ data, ...props }: NodeProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [transformation, setTransformation] = useState(data.config?.transformation || '');
 
@@ -103,7 +104,7 @@ export const TransformNode = memo(({ data, ...props }: NodeProps) => {
   );
 });
 
-export const FilterNode = memo(({ data, ...props }: NodeProps) => (
+const FilterNode = memo(({ data, ...props }: NodeProps) => (
   <BaseNode data={data} {...props} className="border-yellow-500">
     <Handle type="target" position={Position.Left} />
     <div className="text-xs">Filter Data</div>
@@ -111,7 +112,7 @@ export const FilterNode = memo(({ data, ...props }: NodeProps) => (
   </BaseNode>
 ));
 
-export const JoinNode = memo(({ data, ...props }: NodeProps) => (
+const JoinNode = memo(({ data, ...props }: NodeProps) => (
   <BaseNode data={data} {...props} className="border-purple-500">
     <Handle type="target" position={Position.Left} />
     <div className="text-xs">Join Data</div>
@@ -119,7 +120,7 @@ export const JoinNode = memo(({ data, ...props }: NodeProps) => (
   </BaseNode>
 ));
 
-export const OutputNode = memo(({ data, ...props }: NodeProps) => (
+const OutputNode = memo(({ data, ...props }: NodeProps) => (
   <BaseNode data={data} {...props} className="border-red-500">
     <Handle type="target" position={Position.Left} />
     <div className="text-xs">Output</div>
@@ -132,3 +133,5 @@ TransformNode.displayName = 'TransformNode';
 FilterNode.displayName = 'FilterNode';
 JoinNode.displayName = 'JoinNode';
 OutputNode.displayName = 'OutputNode';
+
+export { SourceNode, TransformNode, FilterNode, JoinNode, OutputNode };
