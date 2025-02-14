@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, jsonb, timestamp, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -90,7 +90,6 @@ export type DataSourceConfig = z.infer<typeof dataSourceConfigSchema>;
 
 // Schema validation
 export const insertUserSchema = createInsertSchema(users);
-// Update the insert schema
 export const insertFileSchema = createInsertSchema(files)
   .omit({ id: true, createdAt: true })
   .extend({
@@ -112,3 +111,21 @@ export type InsertFile = z.infer<typeof insertFileSchema>;
 
 export type DataSource = typeof dataSources.$inferSelect;
 export type InsertDataSource = z.infer<typeof insertDataSourceSchema>;
+
+// Embeddings schema for RAG
+export const embeddings = pgTable("embeddings", {
+  id: serial("id").primaryKey(),
+  fileId: integer("file_id").notNull(),
+  chunk: text("chunk").notNull(),
+  vector: text("vector").notNull(), // Store embedding vector as JSON string
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Custom types for embeddings
+export interface RagEmbedding {
+  text: string;
+  vector: number[];
+}
+
+export type Embedding = typeof embeddings.$inferSelect;
+export type InsertEmbedding = typeof embeddings.$inferInsert;

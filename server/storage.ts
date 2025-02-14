@@ -1,7 +1,9 @@
 import { 
   type User, type InsertUser,
   type File, type InsertFile,
-  type DataSource, type InsertDataSource 
+  type DataSource, type InsertDataSource,
+  type Embedding, type InsertEmbedding,
+  type RagEmbedding
 } from "@shared/schema";
 
 export interface IStorage {
@@ -22,19 +24,35 @@ export interface IStorage {
   getDataSourcesByUser(userId: number): Promise<DataSource[]>;
   createDataSource(source: InsertDataSource): Promise<DataSource>;
   deleteDataSource(id: number): Promise<void>;
+
+  // Embedding operations
+  createEmbedding(embedding: InsertEmbedding): Promise<Embedding>;
+  getEmbeddingsByFileIds(fileIds: number[]): Promise<RagEmbedding[]>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private files: Map<number, File>;
   private dataSources: Map<number, DataSource>;
-  private currentIds: { users: number; files: number; dataSources: number };
+  private embeddings: Map<number, Embedding>;
+  private currentIds: { 
+    users: number; 
+    files: number; 
+    dataSources: number;
+    embeddings: number;
+  };
 
   constructor() {
     this.users = new Map();
     this.files = new Map();
     this.dataSources = new Map();
-    this.currentIds = { users: 1, files: 1, dataSources: 1 };
+    this.embeddings = new Map();
+    this.currentIds = { 
+      users: 1, 
+      files: 1, 
+      dataSources: 1,
+      embeddings: 1 
+    };
   }
 
   // User operations
@@ -122,15 +140,35 @@ export class MemStorage implements IStorage {
       status: "pending",
       createdAt: new Date()
     };
-
-    console.log('Creating data source:', source);
-
     this.dataSources.set(id, source);
     return source;
   }
 
   async deleteDataSource(id: number): Promise<void> {
     this.dataSources.delete(id);
+  }
+
+  // Embedding methods with vector serialization
+  async createEmbedding(insertEmbedding: InsertEmbedding): Promise<Embedding> {
+    const id = this.currentIds.embeddings++;
+    const embedding: Embedding = {
+      id,
+      fileId: insertEmbedding.fileId,
+      chunk: insertEmbedding.chunk,
+      vector: JSON.stringify(insertEmbedding.vector),
+      createdAt: new Date()
+    };
+    this.embeddings.set(id, embedding);
+    return embedding;
+  }
+
+  async getEmbeddingsByFileIds(fileIds: number[]): Promise<RagEmbedding[]> {
+    return Array.from(this.embeddings.values())
+      .filter(embedding => fileIds.includes(embedding.fileId))
+      .map(embedding => ({
+        text: embedding.chunk,
+        vector: JSON.parse(embedding.vector)
+      }));
   }
 }
 

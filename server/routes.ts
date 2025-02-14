@@ -2,7 +2,7 @@ import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import { storage } from "./storage";
-import { analyzeFile, searchFiles, suggestTransformations } from "./lib/openai";
+import { analyzeFile, searchFiles, suggestTransformations, processDocumentForRag, findSimilarChunks, generateRagResponse } from "./lib/openai";
 import { insertFileSchema, insertDataSourceSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import fs from "fs/promises";
@@ -55,7 +55,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: req.file.mimetype,
         size: req.file.size,
         path: req.file.path,
-        userId: 1, 
+        userId: 1,
         metadata: null,
         aiSummary: null,
         category: null,
@@ -98,7 +98,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/files", async (req, res) => {
     try {
-      const files = await storage.getFilesByUser(1); 
+      const files = await storage.getFilesByUser(1);
       res.json(files);
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
@@ -130,10 +130,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!query) {
         return res.status(400).json({ message: "Query is required" });
       }
-      const files = await storage.getFilesByUser(1); 
+      const files = await storage.getFilesByUser(1);
       const filesWithContent = files.map(f => ({
         name: f.name,
-        content: f.aiSummary || "" 
+        content: f.aiSummary || ""
       }));
       const results = await searchFiles(query, filesWithContent);
       res.json(results);
@@ -146,7 +146,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const sourceData = insertDataSourceSchema.parse({
         ...req.body,
-        userId: 1, 
+        userId: 1,
         config: req.body.config || null
       });
       const source = await storage.createDataSource(sourceData);
@@ -158,7 +158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/data-sources", async (req, res) => {
     try {
-      const sources = await storage.getDataSourcesByUser(1); 
+      const sources = await storage.getDataSourcesByUser(1);
       res.json(sources);
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
@@ -182,6 +182,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const suggestions = await suggestTransformations(data);
       res.json(suggestions);
+    } catch (error) {
+      res.status(500).json({ message: handleError(error) });
+    }
+  });
+
+  app.post("/api/rag/process", async (req, res) => {
+    try {
+      const { fileId } = req.body;
+      if (!fileId) {
+        return res.status(400).json({ message: "File ID is required" });
+      }
+
+      const file = await storage.getFile(parseInt(fileId));
+      if (!file) {
+        return res.status(404).json({ message: "File not found" });
+      }
+
+      let content: string;
+      try {
+        content = await fs.readFile(file.path, 'utf-8');
+      } catch (error) {
+        return res.status(400).json({ message: "Error reading file" });
+      }
+
+      const embeddings = await processDocumentForRag(content);
+
+      for (const embedding of embeddings) {
+        await storage.createEmbedding({
+          fileId: file.id,
+          chunk: embedding.text,
+          embedding: embedding.vector
+        });
+      }
+
+      res.json({ message: "Document processed successfully", chunks: embeddings.length });
+    } catch (error) {
+      res.status(500).json({ message: handleError(error) });
+    }
+  });
+
+  app.post("/api/rag/query", async (req, res) => {
+    try {
+      const { query, fileIds } = req.body;
+      if (!query) {
+        return res.status(400).json({ message: "Query is required" });
+      }
+
+      const fileEmbeddings = await storage.getEmbeddingsByFileIds(fileIds || []);
+
+      const similarChunks = await findSimilarChunks(query, fileEmbeddings);
+
+      const response = await generateRagResponse(query, similarChunks);
+
+      res.json({
+        response,
+        context: similarChunks
+      });
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
     }
