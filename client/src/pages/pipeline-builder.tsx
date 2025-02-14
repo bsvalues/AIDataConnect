@@ -10,6 +10,7 @@ import ReactFlow, {
   addEdge,
   applyNodeChanges,
   applyEdgeChanges,
+  ReactFlowProvider,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useMutation } from '@tanstack/react-query';
@@ -34,7 +35,7 @@ const nodeTypes = {
   output: OutputNode,
 };
 
-function PipelineBuilder() {
+function Flow() {
   const { toast } = useToast();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -168,6 +169,14 @@ function PipelineBuilder() {
         </div>
       </div>
     </div>
+  );
+}
+
+function PipelineBuilder() {
+  return (
+    <ReactFlowProvider>
+      <Flow />
+    </ReactFlowProvider>
   );
 }
 
