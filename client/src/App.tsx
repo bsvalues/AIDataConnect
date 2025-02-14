@@ -18,7 +18,7 @@ function Router() {
         </div>
         <SidebarNav />
       </aside>
-      <main className="flex-1">
+      <main className="flex-1 p-6">
         <Switch>
           <Route path="/" component={Dashboard} />
           <Route path="/files" component={FileExplorer} />

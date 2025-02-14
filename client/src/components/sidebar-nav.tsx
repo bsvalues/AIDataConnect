@@ -35,7 +35,7 @@ export function SidebarNav() {
   const [location] = useLocation();
 
   return (
-    <div className="space-y-4 py-4">
+    <nav className="space-y-4 py-4">
       <div className="px-3 py-2">
         <div className="space-y-1">
           {navItems.map((item) => (
@@ -54,6 +54,6 @@ export function SidebarNav() {
           ))}
         </div>
       </div>
-    </div>
+    </nav>
   );
 }

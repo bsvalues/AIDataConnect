@@ -12,13 +12,12 @@ import ReactFlow, {
   applyEdgeChanges,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
-import type { PipelineNode, PipelineEdge } from '@shared/schema';
 import { 
   SourceNode, 
   TransformNode, 
@@ -35,9 +34,8 @@ const nodeTypes = {
   output: OutputNode,
 };
 
-export default function PipelineBuilder() {
+function PipelineBuilder() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [pipelineName, setPipelineName] = useState('');
@@ -68,7 +66,6 @@ export default function PipelineBuilder() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/pipelines'] });
       toast({
         title: 'Pipeline saved',
         description: 'Your pipeline has been saved successfully',
@@ -96,8 +93,8 @@ export default function PipelineBuilder() {
       if (!type) return;
 
       const position = {
-        x: event.clientX,
-        y: event.clientY,
+        x: event.clientX - event.currentTarget.getBoundingClientRect().left,
+        y: event.clientY - event.currentTarget.getBoundingClientRect().top,
       };
 
       const newNode = {
@@ -173,3 +170,6 @@ export default function PipelineBuilder() {
     </div>
   );
 }
+
+// Make sure to export the component as default
+export default PipelineBuilder;
