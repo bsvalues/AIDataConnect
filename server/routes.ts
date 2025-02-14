@@ -13,7 +13,13 @@ declare module 'express-serve-static-core' {
   }
 }
 
-const upload = multer({ dest: "uploads/" });
+// Configure multer for file uploads
+const upload = multer({
+  dest: "uploads/",
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Error handling helper
@@ -30,17 +36,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // File management
   app.post("/api/files", upload.single("file"), async (req, res) => {
     try {
-      const file = req.file;
-      if (!file) return res.status(400).json({ message: "No file uploaded" });
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
 
       // Read file content for AI analysis
-      const content = await fs.readFile(file.path, 'utf-8');
+      let content: string;
+      try {
+        content = await fs.readFile(req.file.path, 'utf-8');
+      } catch (error) {
+        return res.status(400).json({ message: "Error reading file" });
+      }
 
       const fileData = insertFileSchema.parse({
-        name: file.originalname,
-        type: file.mimetype,
-        size: file.size,
-        path: file.path,
+        name: req.file.originalname,
+        type: req.file.mimetype,
+        size: req.file.size,
+        path: req.file.path,
         userId: 1, // Mock user ID
         metadata: null,
         aiSummary: null,
@@ -55,6 +67,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const savedFile = await storage.createFile(fileData);
       res.json(savedFile);
     } catch (error) {
+      console.error('File upload error:', error);
       res.status(400).json({ message: handleError(error) });
     }
   });

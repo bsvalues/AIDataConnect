@@ -14,7 +14,19 @@ export function FileUpload() {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await apiRequest("POST", "/api/files", formData);
+
+      // Use fetch directly instead of apiRequest for multipart/form-data
+      const res = await fetch("/api/files", {
+        method: "POST",
+        body: formData,
+        credentials: "include"
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message);
+      }
+
       return res.json();
     },
     onSuccess: () => {
