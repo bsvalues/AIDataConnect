@@ -46,6 +46,10 @@ export async function startFtpServer() {
     await ftpServer.listen();
     console.log("FTP Server is running on port 2121");
   } catch (err) {
+    if (err.code === 'EADDRINUSE') {
+      console.warn("FTP port 2121 is in use, skipping FTP server startup");
+      return; // Continue app startup without FTP server
+    }
     console.error("Error starting FTP server:", err);
     throw err;
   }
