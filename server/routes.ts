@@ -181,9 +181,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Data is required for analysis" });
       }
 
+      console.log("Requesting AI suggestions for data:", JSON.stringify(data).slice(0, 100) + "...");
       const suggestions = await suggestTransformations(data);
+
+      console.log(`Generated ${suggestions.length} suggestions`);
       res.json(suggestions);
     } catch (error) {
+      console.error("Error generating suggestions:", error);
       res.status(500).json({ message: handleError(error) });
     }
   });

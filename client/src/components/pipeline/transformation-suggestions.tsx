@@ -18,7 +18,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Wand2, InfoIcon, Copy } from "lucide-react";
+import { Wand2, InfoIcon, Copy, CheckCircle } from "lucide-react";
 
 interface Transformation {
   name: string;
@@ -34,6 +34,7 @@ interface TransformationSuggestionsProps {
 export function TransformationSuggestions({ data, onApply }: TransformationSuggestionsProps) {
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<Transformation[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const suggestMutation = useMutation({
     mutationFn: async () => {
@@ -46,8 +47,8 @@ export function TransformationSuggestions({ data, onApply }: TransformationSugge
     onSuccess: (data: Transformation[]) => {
       setSuggestions(data);
       toast({
-        title: "AI Suggestions Ready",
-        description: "Our AI has analyzed your data and suggested transformations",
+        title: "AI Analysis Complete",
+        description: `Generated ${data.length} transformation suggestions`,
       });
     },
     onError: (error: Error) => {
@@ -61,9 +62,12 @@ export function TransformationSuggestions({ data, onApply }: TransformationSugge
 
   if (!data) {
     return (
-      <div className="p-4 text-center text-muted-foreground">
-        <InfoIcon className="w-6 h-6 mx-auto mb-2" />
+      <div className="p-6 text-center text-muted-foreground border rounded-lg">
+        <InfoIcon className="w-8 h-8 mx-auto mb-3 opacity-50" />
         <p>Connect a data source to get AI-powered suggestions</p>
+        <p className="text-sm mt-2 text-muted-foreground">
+          The AI will analyze your data and suggest useful transformations
+        </p>
       </div>
     );
   }
@@ -73,9 +77,9 @@ export function TransformationSuggestions({ data, onApply }: TransformationSugge
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-medium">AI Suggestions</h3>
+            <h3 className="text-lg font-semibold">AI Suggestions</h3>
             <p className="text-sm text-muted-foreground">
-              Get smart transformation suggestions based on your data
+              Get intelligent transformation suggestions based on your data structure
             </p>
           </div>
           <TooltipProvider>
@@ -84,11 +88,11 @@ export function TransformationSuggestions({ data, onApply }: TransformationSugge
                 <Button
                   onClick={() => suggestMutation.mutate()}
                   disabled={suggestMutation.isPending}
-                  variant="secondary"
-                  className="w-[200px]"
+                  size="lg"
+                  className="min-w-[200px]"
                 >
-                  <Wand2 className="w-4 h-4 mr-2" />
-                  {suggestMutation.isPending ? "Analyzing..." : "Get AI Suggestions"}
+                  <Wand2 className="w-5 h-5 mr-2" />
+                  {suggestMutation.isPending ? "Analyzing Data..." : "Get AI Suggestions"}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -104,27 +108,48 @@ export function TransformationSuggestions({ data, onApply }: TransformationSugge
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">Suggested Transformations</h3>
+        <div>
+          <h3 className="text-lg font-semibold">Transformation Suggestions</h3>
+          <p className="text-sm text-muted-foreground">
+            Select a suggestion to apply to your data
+          </p>
+        </div>
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setSuggestions([])}
+          onClick={() => {
+            setSuggestions([]);
+            setSelectedId(null);
+          }}
         >
           Clear Suggestions
         </Button>
       </div>
-      <ScrollArea className="h-[300px]">
-        <div className="space-y-4 pr-4">
+
+      <ScrollArea className="h-[400px] border rounded-lg">
+        <div className="p-4 space-y-4">
           {suggestions.map((suggestion, index) => (
-            <Card key={index} className="relative group">
+            <Card 
+              key={index}
+              className={`transition-all hover:shadow-md ${
+                selectedId === index ? 'ring-2 ring-primary' : ''
+              }`}
+            >
               <CardHeader>
-                <CardTitle className="text-sm">{suggestion.name}</CardTitle>
-                <CardDescription className="text-xs">
-                  {suggestion.description}
-                </CardDescription>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="text-base">{suggestion.name}</CardTitle>
+                    <CardDescription className="mt-1">
+                      {suggestion.description}
+                    </CardDescription>
+                  </div>
+                  {selectedId === index && (
+                    <CheckCircle className="w-5 h-5 text-primary" />
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
-                <pre className="text-xs bg-muted p-2 rounded-md overflow-x-auto">
+                <pre className="text-sm bg-muted p-3 rounded-md overflow-x-auto">
                   <code>{suggestion.transformation}</code>
                 </pre>
               </CardContent>
@@ -135,18 +160,25 @@ export function TransformationSuggestions({ data, onApply }: TransformationSugge
                   onClick={() => {
                     navigator.clipboard.writeText(suggestion.transformation);
                     toast({
-                      title: "Copied",
-                      description: "Transformation copied to clipboard",
+                      title: "Copied to Clipboard",
+                      description: "Transformation code copied",
                     });
                   }}
                 >
                   <Copy className="w-4 h-4 mr-2" />
-                  Copy
+                  Copy Code
                 </Button>
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={() => onApply(suggestion.transformation)}
+                  onClick={() => {
+                    setSelectedId(index);
+                    onApply(suggestion.transformation);
+                    toast({
+                      title: "Transformation Applied",
+                      description: "The selected transformation has been applied to your data",
+                    });
+                  }}
                 >
                   Apply
                 </Button>

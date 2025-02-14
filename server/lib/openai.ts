@@ -224,31 +224,38 @@ export async function suggestTransformations(data: any): Promise<Array<{
     messages: [
       {
         role: "system",
-        content: `You are an expert data transformation assistant. Analyze the provided data and suggest useful transformations.
+        content: `You are an expert data transformation assistant. Analyze the provided data and suggest practical transformations.
         For each suggestion, provide:
         - A clear name describing the transformation
         - A brief description explaining what it does and why it's useful
-        - The actual transformation code that can be applied
+        - The actual JavaScript/TypeScript code that can be applied to transform the data
 
         Focus on common data operations like:
-        - Data cleaning and standardization
-        - Type conversions
+        - Data cleaning (removing duplicates, handling missing values)
+        - Type conversions and formatting
         - Filtering and validation
         - Aggregations and calculations
-        - Format transformations
+        - String manipulations and standardization
 
-        Return an array of transformation objects in JSON format.`
+        Return a JSON array of transformation objects with fields: name, description, transformation.
+        Make the transformation code practical and immediately usable.`
       },
       {
         role: "user",
-        content: JSON.stringify({ data, schema: data?._schema || {} })
+        content: JSON.stringify({
+          data,
+          sample: data instanceof Array ? data.slice(0, 5) : data,
+          type: typeof data,
+          keys: data ? Object.keys(data) : []
+        })
       }
     ],
     response_format: { type: "json_object" }
   });
 
   const responseContent = response.choices[0].message.content;
-  if (!responseContent) throw new Error("No response from OpenAI");
+  if (!responseContent) throw new Error("No suggestions generated");
+
   const result = JSON.parse(responseContent);
   return result.transformations || [];
 }

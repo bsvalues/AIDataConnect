@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { TransformationSuggestions } from './transformation-suggestions';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 
 interface BaseNodeProps extends NodeProps {
   children?: ReactNode;
@@ -51,12 +53,10 @@ export const TransformNode = memo(({ data, ...props }: NodeProps) => {
   const handleApplyTransformation = (newTransform: string) => {
     setTransformation(newTransform);
     // Update node data
-    if (props.data) {
-      props.data.config = {
-        ...props.data.config,
-        transformation: newTransform
-      };
-    }
+    data.config = {
+      ...data.config,
+      transformation: newTransform
+    };
   };
 
   return (
@@ -67,23 +67,27 @@ export const TransformNode = memo(({ data, ...props }: NodeProps) => {
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" size="sm" className="w-full">
-              Edit Transform
+              {transformation ? 'Edit Transform' : 'Add Transform'}
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[800px]">
             <DialogHeader>
               <DialogTitle>Data Transformation</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <Textarea
-                value={transformation}
-                onChange={(e) => handleApplyTransformation(e.target.value)}
-                placeholder="Enter transformation code..."
-                className="font-mono text-sm"
-                rows={5}
-              />
+              <div className="space-y-2">
+                <Label>Current Transformation</Label>
+                <Textarea
+                  value={transformation}
+                  onChange={(e) => handleApplyTransformation(e.target.value)}
+                  placeholder="Enter transformation code..."
+                  className="font-mono text-sm"
+                  rows={5}
+                />
+              </div>
+              <Separator className="my-4" />
               <TransformationSuggestions
-                data={props.data?.inputData}
+                data={data.inputData}
                 onApply={handleApplyTransformation}
               />
             </div>
