@@ -55,7 +55,7 @@ export class MemStorage implements IStorage {
     return user;
   }
 
-  // File operations
+  // File operations with FTP support
   async getFile(id: number): Promise<File | undefined> {
     return this.files.get(id);
   }
@@ -74,7 +74,9 @@ export class MemStorage implements IStorage {
       metadata: insertFile.metadata || null,
       aiSummary: insertFile.aiSummary || null,
       category: insertFile.category || null,
-      createdAt: new Date()
+      createdAt: new Date(),
+      transferType: insertFile.transferType || "local",
+      ftpConfig: insertFile.ftpConfig || null
     };
     this.files.set(id, file);
     return file;
@@ -89,7 +91,9 @@ export class MemStorage implements IStorage {
       ...updates,
       metadata: updates.metadata ?? file.metadata,
       aiSummary: updates.aiSummary ?? file.aiSummary,
-      category: updates.category ?? file.category
+      category: updates.category ?? file.category,
+      ftpConfig: updates.ftpConfig ?? file.ftpConfig,
+      transferType: updates.transferType ?? file.transferType
     };
     this.files.set(id, updated);
     return updated;
@@ -115,7 +119,7 @@ export class MemStorage implements IStorage {
     const source: DataSource = {
       id,
       ...insertSource,
-      status: "pending", // Set initial status
+      status: "pending",
       createdAt: new Date()
     };
 

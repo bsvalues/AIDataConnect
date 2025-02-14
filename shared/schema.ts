@@ -9,6 +9,17 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
 });
 
+// Add FTP configuration to the existing schema
+export const ftpConfigSchema = z.object({
+  host: z.string().min(1, "Host is required"),
+  port: z.number().int().positive("Port must be a positive number"),
+  user: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+  secure: z.boolean().default(true),
+  passive: z.boolean().default(true)
+});
+
+// Add FTP transfer type to File schema
 export const files = pgTable("files", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -20,6 +31,8 @@ export const files = pgTable("files", {
   aiSummary: text("ai_summary"),
   category: text("category"),
   createdAt: timestamp("created_at").defaultNow(),
+  transferType: text("transfer_type").default("local"), // "local" | "ftp"
+  ftpConfig: jsonb("ftp_config").$type<z.infer<typeof ftpConfigSchema>>(),
 });
 
 // Enhanced data source schema with specific connector types
@@ -77,7 +90,13 @@ export type DataSourceConfig = z.infer<typeof dataSourceConfigSchema>;
 
 // Schema validation
 export const insertUserSchema = createInsertSchema(users);
-export const insertFileSchema = createInsertSchema(files).omit({ id: true, createdAt: true });
+// Update the insert schema
+export const insertFileSchema = createInsertSchema(files)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    transferType: z.enum(["local", "ftp"]).default("local"),
+    ftpConfig: ftpConfigSchema.optional(),
+  });
 export const insertDataSourceSchema = createInsertSchema(dataSources)
   .omit({ id: true, createdAt: true, status: true })
   .extend({

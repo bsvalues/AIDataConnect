@@ -6,6 +6,8 @@ import { analyzeFile, searchFiles, suggestTransformations } from "./lib/openai";
 import { insertFileSchema, insertDataSourceSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import fs from "fs/promises";
+import path from 'path';
+import { FtpClient } from "./lib/ftp"; // Import from our FTP service module
 
 declare module 'express-serve-static-core' {
   interface Request {
@@ -13,7 +15,6 @@ declare module 'express-serve-static-core' {
   }
 }
 
-// Configure multer for file uploads
 const upload = multer({
   dest: "uploads/",
   limits: {
@@ -22,7 +23,7 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Error handling helper
+  await ensureUploadsDirectory();
   const handleError = (error: unknown) => {
     if (error instanceof ZodError) {
       return error.errors[0].message;
@@ -33,14 +34,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return "An unexpected error occurred";
   };
 
-  // File management
   app.post("/api/files", upload.single("file"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      // Read file content for AI analysis
       let content: string;
       try {
         content = await fs.readFile(req.file.path, 'utf-8');
@@ -48,18 +47,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Error reading file" });
       }
 
+      const transferType = req.body.transferType || "local";
+      const ftpConfig = req.body.ftpConfig ? JSON.parse(req.body.ftpConfig) : null;
+
       const fileData = insertFileSchema.parse({
         name: req.file.originalname,
         type: req.file.mimetype,
         size: req.file.size,
         path: req.file.path,
-        userId: 1, // Mock user ID
+        userId: 1, 
         metadata: null,
         aiSummary: null,
-        category: null
+        category: null,
+        transferType,
+        ftpConfig
       });
 
-      // Analyze file with AI
+      if (transferType === "ftp" && ftpConfig) {
+        const ftpClient = new FtpClient();
+        try {
+          await ftpClient.connect(
+            ftpConfig.host,
+            ftpConfig.port,
+            ftpConfig.user,
+            ftpConfig.password
+          );
+          await ftpClient.uploadFile(
+            req.file.path,
+            path.basename(req.file.path)
+          );
+          await ftpClient.disconnect();
+          fileData.path = `ftp://${ftpConfig.host}/${path.basename(req.file.path)}`;
+        } catch (ftpError) {
+          console.error('FTP upload error:', ftpError);
+          return res.status(400).json({ message: "FTP upload failed" });
+        }
+      }
+
       const analysis = await analyzeFile(content);
       fileData.aiSummary = analysis.summary;
       fileData.category = analysis.category;
@@ -74,7 +98,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/files", async (req, res) => {
     try {
-      const files = await storage.getFilesByUser(1); // Mock user ID
+      const files = await storage.getFilesByUser(1); 
       res.json(files);
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
@@ -100,17 +124,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Search
   app.post("/api/search", async (req, res) => {
     try {
       const { query } = req.body;
       if (!query) {
         return res.status(400).json({ message: "Query is required" });
       }
-      const files = await storage.getFilesByUser(1); // Mock user ID
+      const files = await storage.getFilesByUser(1); 
       const filesWithContent = files.map(f => ({
         name: f.name,
-        content: f.aiSummary || "" // Use AI summary as searchable content
+        content: f.aiSummary || "" 
       }));
       const results = await searchFiles(query, filesWithContent);
       res.json(results);
@@ -119,12 +142,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Data sources
   app.post("/api/data-sources", async (req, res) => {
     try {
       const sourceData = insertDataSourceSchema.parse({
         ...req.body,
-        userId: 1, // Mock user ID
+        userId: 1, 
         config: req.body.config || null
       });
       const source = await storage.createDataSource(sourceData);
@@ -136,7 +158,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/data-sources", async (req, res) => {
     try {
-      const sources = await storage.getDataSourcesByUser(1); // Mock user ID
+      const sources = await storage.getDataSourcesByUser(1); 
       res.json(sources);
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
@@ -152,7 +174,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Data transformations
   app.post("/api/suggest-transformations", async (req, res) => {
     try {
       const { data } = req.body;
@@ -168,4 +189,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
   return httpServer;
+}
+
+async function ensureUploadsDirectory() {
+  const uploadsDir = "./uploads";
+  try {
+    await fs.access(uploadsDir);
+  } catch {
+    await fs.mkdir(uploadsDir);
+  }
+  return uploadsDir;
 }
