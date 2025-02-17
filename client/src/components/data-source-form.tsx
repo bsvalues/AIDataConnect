@@ -34,6 +34,8 @@ import {
   User
 } from "lucide-react";
 
+import * as z from 'zod';
+
 type SourceType = "sql" | "api" | "cloud_storage";
 
 const sourceTypes = [
@@ -106,7 +108,9 @@ export function DataSourceForm() {
   };
 
   const form = useForm<InsertDataSource>({
-    resolver: zodResolver(insertDataSourceSchema),
+    resolver: zodResolver(insertDataSourceSchema.extend({
+      name: z.string().min(1, "Source name is required")
+    })),
     defaultValues: {
       name: "",
       type: "sql",
@@ -207,9 +211,10 @@ export function DataSourceForm() {
                   <FormControl>
                     <Input 
                       type="number" 
-                      placeholder="1433" 
+                      placeholder="1433"
                       {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                      value={field.value?.toString() || ''} 
+                      onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value, 10) : '')}
                       data-testid="port-input"
                     />
                   </FormControl>
@@ -328,7 +333,7 @@ export function DataSourceForm() {
               <FormControl>
                 <Input placeholder="My Data Source" {...field} data-testid="name-input" />
               </FormControl>
-              <FormMessage />
+              <FormMessage data-testid="name-validation-error" />
             </FormItem>
           )}
         />

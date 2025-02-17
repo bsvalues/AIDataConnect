@@ -1,4 +1,3 @@
-
 import { memo, type ReactNode, useState } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -42,7 +41,7 @@ const BaseNode = memo(({ data, children, className }: BaseNodeProps) => {
 
 const SourceNode = memo(({ data, ...props }: NodeProps) => (
   <BaseNode data={data} {...props} className="border-blue-500">
-    <Handle type="source" position={Position.Right} />
+    <Handle type="source" position={Position.Right} data-handlepos="right" />
     <div className="text-xs">Data Source</div>
   </BaseNode>
 ));
@@ -61,7 +60,7 @@ const TransformNode = memo(({ data, ...props }: NodeProps) => {
 
   return (
     <BaseNode data={data} {...props} className="border-green-500">
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={Position.Left} data-handlepos="left" />
       <div className="space-y-2">
         <div className="text-xs">Transform Data</div>
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -99,30 +98,30 @@ const TransformNode = memo(({ data, ...props }: NodeProps) => {
           </div>
         )}
       </div>
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={Position.Right} data-handlepos="right" />
     </BaseNode>
   );
 });
 
 const FilterNode = memo(({ data, ...props }: NodeProps) => (
   <BaseNode data={data} {...props} className="border-yellow-500">
-    <Handle type="target" position={Position.Left} />
+    <Handle type="target" position={Position.Left} data-handlepos="left" />
     <div className="text-xs">Filter Data</div>
-    <Handle type="source" position={Position.Right} />
+    <Handle type="source" position={Position.Right} data-handlepos="right" />
   </BaseNode>
 ));
 
 const JoinNode = memo(({ data, ...props }: NodeProps) => (
   <BaseNode data={data} {...props} className="border-purple-500">
-    <Handle type="target" position={Position.Left} />
+    <Handle type="target" position={Position.Left} data-handlepos="left" />
     <div className="text-xs">Join Data</div>
-    <Handle type="source" position={Position.Right} />
+    <Handle type="source" position={Position.Right} data-handlepos="right" />
   </BaseNode>
 ));
 
 const OutputNode = memo(({ data, ...props }: NodeProps) => (
   <BaseNode data={data} {...props} className="border-red-500">
-    <Handle type="target" position={Position.Left} />
+    <Handle type="target" position={Position.Left} data-handlepos="left" />
     <div className="text-xs">Output</div>
   </BaseNode>
 ));
