@@ -38,19 +38,19 @@ type SourceType = "sql" | "api" | "cloud_storage";
 
 const sourceTypes = [
   { 
-    value: "sql", 
+    value: "sql" as const, 
     label: "SQL Database",
     icon: Database,
     description: "Connect to SQL databases like PostgreSQL, MySQL, etc."
   },
   { 
-    value: "api", 
+    value: "api" as const, 
     label: "REST API",
     icon: Globe,
     description: "Connect to REST APIs with custom authentication"
   },
   { 
-    value: "cloud_storage", 
+    value: "cloud_storage" as const, 
     label: "Cloud Storage",
     icon: HardDrive,
     description: "Connect to S3, Google Cloud Storage, or Azure Blob"
@@ -68,32 +68,60 @@ export function DataSourceForm() {
   const queryClient = useQueryClient();
   const [sourceType, setSourceType] = useState<SourceType>("sql");
 
+  const getDefaultConfig = (type: SourceType) => {
+    switch (type) {
+      case "sql":
+        return {
+          type: "sql" as const,
+          config: {
+            dialect: "sqlserver",
+            host: "",
+            port: 1433,
+            database: "",
+            username: "",
+            password: "",
+            encrypt: true,
+            trustedConnection: false,
+            instanceName: ""
+          }
+        };
+      case "api":
+        return {
+          type: "api" as const,
+          config: {
+            baseUrl: "",
+            authType: "none",
+            headers: {}
+          }
+        };
+      case "cloud_storage":
+        return {
+          type: "cloud_storage" as const,
+          config: {
+            provider: "s3",
+            bucket: "",
+            credentials: {},
+            prefix: "",
+            region: ""
+          }
+        };
+      default:
+        return { type: type, config: {} }; // Handle unknown types
+    }
+  };
+
   const form = useForm<InsertDataSource>({
     resolver: zodResolver(insertDataSourceSchema),
     defaultValues: {
       name: "",
       type: "sql",
-      config: {
-        type: "sql",
-        config: {
-          dialect: "sqlserver",
-          host: "",
-          port: 1433,
-          database: "",
-          username: "",
-          password: "",
-          encrypt: true,
-          trustedConnection: false,
-          instanceName: ""
-        }
-      },
+      config: getDefaultConfig("sql"),
       userId: 1 // Mock user ID
     }
   });
 
   const createMutation = useMutation({
     mutationFn: async (values: InsertDataSource) => {
-      console.log('Submitting data source:', values);
       const res = await apiRequest("POST", "/api/data-sources", values);
       const data = await res.json();
       return data;
@@ -107,7 +135,6 @@ export function DataSourceForm() {
       form.reset();
     },
     onError: (error: Error) => {
-      console.error('Data source creation error:', error);
       toast({
         title: "Error creating data source",
         description: error.message,
@@ -151,7 +178,6 @@ export function DataSourceForm() {
                 </FormItem>
               )}
             />
-
             <FormField
               control={form.control}
               name="config.config.host"
@@ -171,7 +197,6 @@ export function DataSourceForm() {
                 </FormItem>
               )}
             />
-
             <FormField
               control={form.control}
               name="config.config.instanceName"
@@ -188,7 +213,6 @@ export function DataSourceForm() {
                 </FormItem>
               )}
             />
-
             <FormField
               control={form.control}
               name="config.config.port"
@@ -200,14 +224,13 @@ export function DataSourceForm() {
                       type="number" 
                       placeholder="1433" 
                       {...field} 
-                      onChange={e => field.onChange(parseInt(e.target.value))}
+                      onChange={e => field.onChange(parseInt(e.target.value, 10))}
                     />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
             <FormField
               control={form.control}
               name="config.config.database"
@@ -224,7 +247,6 @@ export function DataSourceForm() {
                 </FormItem>
               )}
             />
-
             <FormField
               control={form.control}
               name="config.config.trustedConnection"
@@ -245,7 +267,6 @@ export function DataSourceForm() {
                 </FormItem>
               )}
             />
-
             {!form.watch("config.config.trustedConnection") && (
               <>
                 <FormField
@@ -264,7 +285,6 @@ export function DataSourceForm() {
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="config.config.password"
@@ -283,7 +303,6 @@ export function DataSourceForm() {
                 />
               </>
             )}
-
             <FormField
               control={form.control}
               name="config.config.encrypt"
@@ -306,24 +325,14 @@ export function DataSourceForm() {
             />
           </>
         );
-
-      // Add other connector types here
       default:
         return null;
     }
   };
 
-  async function onSubmit(values: InsertDataSource) {
-    try {
-      await createMutation.mutate(values);
-    } catch (error) {
-      console.error('Form submission error:', error);
-    }
-  }
-
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(createMutation.mutate)} className="space-y-6">
         <FormField
           control={form.control}
           name="name"
@@ -348,12 +357,11 @@ export function DataSourceForm() {
                 onValueChange={(value: SourceType) => {
                   field.onChange(value);
                   setSourceType(value);
+                  // Reset form with new default config based on selected type
                   form.reset({
                     ...form.getValues(),
-                    config: {
-                      type: value,
-                      config: {}
-                    }
+                    type: value,
+                    config: getDefaultConfig(value)
                   });
                 }} 
                 defaultValue={field.value}
