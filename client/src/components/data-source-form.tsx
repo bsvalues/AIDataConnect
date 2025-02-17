@@ -111,7 +111,7 @@ export function DataSourceForm() {
       name: "",
       type: "sql",
       config: getDefaultConfig("sql"),
-      userId: 1 // Mock user ID
+      userId: 1 
     }
   });
 
@@ -160,13 +160,13 @@ export function DataSourceForm() {
                     defaultValue={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger data-testid="dialect-select">
                         <SelectValue placeholder="Select database type" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {sqlDialects.map((dialect) => (
-                        <SelectItem key={dialect.value} value={dialect.value}>
+                        <SelectItem key={dialect.value} value={dialect.value} data-testid={`dialect-option-${dialect.value}`}>
                           <div className="flex items-center gap-2">
                             <dialect.icon className="w-4 h-4" />
                             <span>{dialect.label}</span>
@@ -188,7 +188,7 @@ export function DataSourceForm() {
                   <FormControl>
                     <div className="flex items-center space-x-2">
                       <Server className="w-4 h-4 text-muted-foreground" />
-                      <Input placeholder="localhost or server name" {...field} />
+                      <Input placeholder="localhost or server name" {...field} data-testid="host-input" />
                     </div>
                   </FormControl>
                   <FormDescription>
@@ -210,6 +210,7 @@ export function DataSourceForm() {
                       placeholder="1433" 
                       {...field}
                       onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                      data-testid="port-input"
                     />
                   </FormControl>
                   <FormMessage />
@@ -225,7 +226,7 @@ export function DataSourceForm() {
                   <FormControl>
                     <div className="flex items-center space-x-2">
                       <Database className="w-4 h-4 text-muted-foreground" />
-                      <Input placeholder="master" {...field} />
+                      <Input placeholder="master" {...field} data-testid="database-input" />
                     </div>
                   </FormControl>
                   <FormMessage />
@@ -263,7 +264,7 @@ export function DataSourceForm() {
                       <FormControl>
                         <div className="flex items-center space-x-2">
                           <User className="w-4 h-4 text-muted-foreground" />
-                          <Input placeholder="sa" {...field} />
+                          <Input placeholder="sa" {...field} data-testid="username-input" />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -279,7 +280,7 @@ export function DataSourceForm() {
                       <FormControl>
                         <div className="flex items-center space-x-2">
                           <Lock className="w-4 h-4 text-muted-foreground" />
-                          <Input type="password" {...field} />
+                          <Input type="password" {...field} data-testid="password-input" />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -317,7 +318,7 @@ export function DataSourceForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" data-testid="data-source-form">
         <FormField
           control={form.control}
           name="name"
@@ -325,7 +326,7 @@ export function DataSourceForm() {
             <FormItem>
               <FormLabel>Name</FormLabel>
               <FormControl>
-                <Input placeholder="My Data Source" {...field} />
+                <Input placeholder="My Data Source" {...field} data-testid="name-input" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -352,13 +353,13 @@ export function DataSourceForm() {
                 defaultValue={field.value}
               >
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="type-select">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
                   {sourceTypes.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
+                    <SelectItem key={type.value} value={type.value} data-testid={`type-option-${type.value}`}>
                       <div className="flex items-center gap-2">
                         <type.icon className="w-4 h-4" />
                         <div>
@@ -381,7 +382,7 @@ export function DataSourceForm() {
           {renderConfigFields()}
         </div>
 
-        <Button type="submit" disabled={createMutation.isPending}>
+        <Button type="submit" disabled={createMutation.isPending} data-testid="submit-button">
           {createMutation.isPending ? "Creating..." : "Create Data Source"}
         </Button>
       </form>
