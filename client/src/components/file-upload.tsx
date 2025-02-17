@@ -73,7 +73,15 @@ export function FileUpload() {
 
       formData.append("transferType", uploadData.transferType);
       if (useFtp) {
-        formData.append("ftpConfig", JSON.stringify(uploadData.ftpConfig));
+        const validationError = validateFtpConfig();
+        if (validationError) {
+          throw new Error(validationError);
+        }
+        formData.append("transferType", "ftp");
+        formData.append("ftpConfig", JSON.stringify({
+          ...ftpConfig,
+          port: Number(ftpConfig.port)
+        }));
       }
 
       const res = await fetch("/api/files", {

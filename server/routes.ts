@@ -48,7 +48,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const transferType = req.body.transferType || "local";
-      const ftpConfig = transferType === "ftp" && req.body.ftpConfig ? JSON.parse(req.body.ftpConfig) : undefined;
+      let ftpConfig = null;
+      
+      if (transferType === "ftp" && req.body.ftpConfig) {
+        try {
+          ftpConfig = JSON.parse(req.body.ftpConfig);
+          if (!ftpConfig.host || !ftpConfig.port || !ftpConfig.user || !ftpConfig.password) {
+            return res.status(400).json({ message: "Invalid FTP configuration" });
+          }
+        } catch (error) {
+          return res.status(400).json({ message: "Invalid FTP configuration format" });
+        }
+      }
 
       const fileData = insertFileSchema.parse({
         name: req.file.originalname,
