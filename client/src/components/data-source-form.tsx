@@ -68,45 +68,40 @@ export function DataSourceForm() {
   const queryClient = useQueryClient();
   const [sourceType, setSourceType] = useState<SourceType>("sql");
 
+  const defaultSqlConfig = {
+    dialect: "sqlserver" as const,
+    host: "",
+    port: 1433,
+    database: "",
+    username: "",
+    password: "",
+    encrypt: true,
+    trustedConnection: false,
+    instanceName: ""
+  };
+
+  const defaultApiConfig = {
+    baseUrl: "",
+    authType: "none" as const,
+    headers: {}
+  };
+
+  const defaultCloudStorageConfig = {
+    provider: "s3" as const,
+    bucket: "",
+    credentials: {},
+    prefix: "",
+    region: ""
+  };
+
   const getDefaultConfig = (type: SourceType) => {
     switch (type) {
       case "sql":
-        return {
-          type: "sql" as const,
-          config: {
-            dialect: "sqlserver",
-            host: "",
-            port: 1433,
-            database: "",
-            username: "",
-            password: "",
-            encrypt: true,
-            trustedConnection: false,
-            instanceName: ""
-          }
-        };
+        return { type: "sql" as const, config: defaultSqlConfig };
       case "api":
-        return {
-          type: "api" as const,
-          config: {
-            baseUrl: "",
-            authType: "none",
-            headers: {}
-          }
-        };
+        return { type: "api" as const, config: defaultApiConfig };
       case "cloud_storage":
-        return {
-          type: "cloud_storage" as const,
-          config: {
-            provider: "s3",
-            bucket: "",
-            credentials: {},
-            prefix: "",
-            region: ""
-          }
-        };
-      default:
-        return { type: type, config: {} }; // Handle unknown types
+        return { type: "cloud_storage" as const, config: defaultCloudStorageConfig };
     }
   };
 
@@ -123,8 +118,10 @@ export function DataSourceForm() {
   const createMutation = useMutation({
     mutationFn: async (values: InsertDataSource) => {
       const res = await apiRequest("POST", "/api/data-sources", values);
-      const data = await res.json();
-      return data;
+      if (!res.ok) {
+        throw new Error('Failed to create data source');
+      }
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/data-sources"] });
@@ -132,7 +129,7 @@ export function DataSourceForm() {
         title: "Data source created",
         description: "Your data source has been created successfully"
       });
-      form.reset();
+      form.reset(form.getValues());
     },
     onError: (error: Error) => {
       toast({
@@ -142,6 +139,10 @@ export function DataSourceForm() {
       });
     }
   });
+
+  const onSubmit = (values: InsertDataSource) => {
+    createMutation.mutate(values);
+  };
 
   const renderConfigFields = () => {
     switch (sourceType) {
@@ -199,22 +200,6 @@ export function DataSourceForm() {
             />
             <FormField
               control={form.control}
-              name="config.config.instanceName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Instance Name (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="SQLEXPRESS" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    Leave empty for default instance
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
               name="config.config.port"
               render={({ field }) => (
                 <FormItem>
@@ -223,8 +208,8 @@ export function DataSourceForm() {
                     <Input 
                       type="number" 
                       placeholder="1433" 
-                      {...field} 
-                      onChange={e => field.onChange(parseInt(e.target.value, 10))}
+                      {...field}
+                      onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
                     />
                   </FormControl>
                   <FormMessage />
@@ -332,7 +317,7 @@ export function DataSourceForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(createMutation.mutate)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <FormField
           control={form.control}
           name="name"
@@ -357,11 +342,11 @@ export function DataSourceForm() {
                 onValueChange={(value: SourceType) => {
                   field.onChange(value);
                   setSourceType(value);
-                  // Reset form with new default config based on selected type
+                  const newConfig = getDefaultConfig(value);
                   form.reset({
                     ...form.getValues(),
                     type: value,
-                    config: getDefaultConfig(value)
+                    config: newConfig
                   });
                 }} 
                 defaultValue={field.value}
