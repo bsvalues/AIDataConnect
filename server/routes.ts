@@ -235,6 +235,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         message: "Document processed successfully",
         chunks: embeddings.length
+      });
+    } catch (error) {
+      res.status(500).json({ message: handleError(error) });
+    }
+  });
 
   app.get("/api/analytics/metrics", async (req, res) => {
     try {
