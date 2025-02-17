@@ -1,5 +1,6 @@
 import winston from 'winston';
 import { Request, Response } from 'express';
+import { sendErrorNotification } from './slack';
 
 // Custom log levels
 const levels = {
@@ -44,13 +45,28 @@ const logger = winston.createLogger({
   ],
 });
 
+// Extend logger to send error notifications to Slack
+const originalErrorLog = logger.error.bind(logger);
+logger.error = (message: any, ...args: any[]) => {
+  // Call original error logger
+  originalErrorLog(message, ...args);
+
+  // Send to Slack if it's an error object or has metadata
+  if (message instanceof Error || (args[0] && args[0].metadata)) {
+    const metadata = args[0]?.metadata || {};
+    sendErrorNotification(message, metadata).catch((err) => {
+      originalErrorLog("Failed to send Slack notification", { error: err });
+    });
+  }
+};
+
 // Request logging middleware
 export const requestLogger = (req: Request, res: Response, next: Function) => {
   const startTime = Date.now();
 
   res.on('finish', () => {
     const duration = Date.now() - startTime;
-    
+
     logger.http({
       message: `${req.method} ${req.url}`,
       metadata: {
