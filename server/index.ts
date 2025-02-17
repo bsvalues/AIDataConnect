@@ -1,65 +1,51 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { setupVite, serveStatic } from "./vite";
 import { startFtpServer } from "./lib/ftp";
+import logger, { requestLogger, errorLogger } from "./lib/logger";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+// Add request logging middleware
+app.use(requestLogger);
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      log(logLine);
-    }
-  });
-
-  next();
-});
+// Add error logging middleware
+app.use(errorLogger);
 
 (async () => {
   try {
     // Start FTP server first
-    log("Starting FTP server...");
+    logger.info("Starting FTP server...");
     await startFtpServer();
-    log("FTP server started successfully on port 2121");
+    logger.info("FTP server started successfully on port 2121");
 
-    log("Registering Express routes...");
+    logger.info("Registering Express routes...");
     const server = await registerRoutes(app);
-    log("Express routes registered successfully");
+    logger.info("Express routes registered successfully");
 
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
-      log(`Error: ${status} - ${message}`);
-      res.status(status).json({ message });
-      throw err;
+
+      logger.error("Server error", {
+        status,
+        message,
+        stack: err.stack,
+        code: err.code,
+      });
+
+      res.status(status).json({ 
+        message,
+        ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
+      });
     });
 
     if (app.get("env") === "development") {
-      log("Setting up Vite middleware...");
+      logger.info("Setting up Vite middleware...");
       await setupVite(app, server);
-      log("Vite middleware setup complete");
+      logger.info("Vite middleware setup complete");
     } else {
       serveStatic(app);
     }
@@ -70,20 +56,28 @@ app.use((req, res, next) => {
     server.listen(PORT)
       .on('error', (error: any) => {
         if (error.code === 'EADDRINUSE') {
-          log(`Port ${PORT} is in use, trying ${PORT + 1}...`);
+          logger.warn(`Port ${PORT} is in use, trying ${PORT + 1}...`);
           server.listen(PORT + 1);
         } else {
-          console.error('Server startup error:', error);
+          logger.error("Server startup error", { 
+            error: error.message,
+            stack: error.stack,
+            code: error.code
+          });
           process.exit(1);
         }
       })
       .on('listening', () => {
         const addr = server.address();
         const actualPort = typeof addr === 'object' ? addr?.port : PORT;
-        log(`Web server started successfully on http://0.0.0.0:${actualPort}`);
+        logger.info(`Web server started successfully on http://0.0.0.0:${actualPort}`);
       });
-  } catch (error) {
-    console.error("Server startup error:", error);
+  } catch (error: any) {
+    logger.error("Server startup error", { 
+      error: error.message,
+      stack: error.stack,
+      code: error.code
+    });
     process.exit(1);
   }
 })();
