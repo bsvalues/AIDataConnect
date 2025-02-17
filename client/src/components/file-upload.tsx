@@ -18,6 +18,14 @@ import {
 } from "@/components/ui/dialog";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const ACCEPTED_FILE_TYPES = {
+  'text/plain': ['.txt'],
+  'text/csv': ['.csv'],
+  'application/json': ['.json'],
+  'application/pdf': ['.pdf'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/msword': ['.doc'],
+};
 
 export function FileUpload() {
   const { toast } = useToast();
@@ -49,6 +57,10 @@ export function FileUpload() {
 
       if (file.size > MAX_FILE_SIZE) {
         throw new Error(`File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`);
+      }
+
+      if (!Object.keys(ACCEPTED_FILE_TYPES).includes(file.type)) {
+        throw new Error("Invalid file type. Please upload a supported file type.");
       }
 
       const formData = new FormData();
@@ -89,7 +101,17 @@ export function FileUpload() {
     }
   });
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: any[]) => {
+    if (rejectedFiles.length > 0) {
+      const errors = rejectedFiles[0].errors.map((err: any) => err.message).join(", ");
+      toast({
+        title: "Invalid file",
+        description: errors,
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (acceptedFiles.length === 0) {
       toast({
         title: "Invalid file",
@@ -126,8 +148,15 @@ export function FileUpload() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    maxSize: MAX_FILE_SIZE
+    maxSize: MAX_FILE_SIZE,
+    accept: Object.keys(ACCEPTED_FILE_TYPES).map(key => `${key}`).join(',')
   });
+
+  const supportedFileTypes = useMemo(() => {
+    return Object.values(ACCEPTED_FILE_TYPES)
+      .flat()
+      .join(', ');
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -248,6 +277,9 @@ export function FileUpload() {
             <p>Drag & drop files here, or click to select files</p>
             <p className="text-sm text-muted-foreground">
               Maximum file size: {MAX_FILE_SIZE / 1024 / 1024}MB
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Supported file types: {supportedFileTypes}
             </p>
             {useFtp && (
               <p className="text-sm text-muted-foreground">
