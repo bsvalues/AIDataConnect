@@ -278,12 +278,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-      });
-    } catch (error) {
-      res.status(500).json({ message: handleError(error) });
-    }
-  });
-
   app.post("/api/rag/query", async (req, res) => {
     try {
       const { query, fileIds, config } = req.body;
