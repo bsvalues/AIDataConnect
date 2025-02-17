@@ -235,6 +235,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         message: "Document processed successfully",
         chunks: embeddings.length
+
+  app.get("/api/analytics/metrics", async (req, res) => {
+    try {
+      const files = await storage.getFilesByUser(1);
+      const embeddings = await storage.getAllEmbeddings();
+      const pipelines = await storage.getPipelinesByUser(1);
+
+      const metrics = {
+        totalProcessedFiles: files.length,
+        avgRagScore: embeddings.length > 0 ? 
+          embeddings.reduce((acc, curr) => acc + (curr.performance?.score || 0), 0) / embeddings.length : 
+          0,
+        transformationCount: pipelines.reduce((acc, curr) => acc + (curr.transformations?.length || 0), 0)
+      };
+
+      res.json(metrics);
+    } catch (error) {
+      res.status(500).json({ message: handleError(error) });
+    }
+  });
+
+  app.get("/api/analytics/usage", async (req, res) => {
+    try {
+      const files = await storage.getFilesByUser(1);
+      const now = new Date();
+      const last7Days = Array.from({length: 7}, (_, i) => {
+        const date = new Date(now);
+        date.setDate(date.getDate() - i);
+        return date.toISOString().split('T')[0];
+      }).reverse();
+
+      const data = last7Days.map(date => ({
+        date,
+        files: files.filter(f => f.createdAt.toISOString().startsWith(date)).length,
+        queries: Math.floor(Math.random() * 10) // Mock data - replace with actual query tracking
+      }));
+
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ message: handleError(error) });
+    }
+  });
+
       });
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
