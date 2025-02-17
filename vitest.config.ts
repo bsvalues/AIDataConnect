@@ -24,6 +24,7 @@ export default defineConfig({
     },
     include: ['client/src/**/*.test.{ts,tsx}'],
     exclude: ['node_modules', 'dist'],
+    testTimeout: 10000,
   },
   resolve: {
     alias: {

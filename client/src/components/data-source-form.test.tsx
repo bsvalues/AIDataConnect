@@ -10,11 +10,15 @@ vi.mock('@/lib/queryClient', () => ({
   apiRequest: vi.fn()
 }));
 
+// Set up query client with test configuration
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: false,
     },
+    mutations: {
+      retry: false
+    }
   },
 });
 
@@ -30,80 +34,128 @@ describe('DataSourceForm', () => {
   beforeEach(() => {
     queryClient.clear();
     vi.clearAllMocks();
-    (apiRequest as jest.Mock).mockImplementation(() => 
-      Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ id: 1, name: "Test DB", type: "sql" })
-      })
-    );
   });
 
-  it('renders all form fields for SQL data source', () => {
+  it('renders all form fields for SQL data source', async () => {
     renderWithProviders(<DataSourceForm />);
 
-    // Check if form is rendered
-    expect(screen.getByTestId('data-source-form')).toBeInTheDocument();
+    // Wait for form to be rendered
+    await waitFor(() => {
+      expect(screen.getByTestId('data-source-form')).toBeInTheDocument();
+      expect(screen.getByTestId('name-input')).toBeInTheDocument();
+      expect(screen.getByTestId('type-select')).toBeInTheDocument();
+    });
 
-    // Check if basic fields are rendered
-    expect(screen.getByTestId('name-input')).toBeInTheDocument();
-    expect(screen.getByTestId('type-select')).toBeInTheDocument();
-
-    // SQL specific fields should be visible by default
-    expect(screen.getByTestId('dialect-select')).toBeInTheDocument();
-    expect(screen.getByTestId('host-input')).toBeInTheDocument();
-    expect(screen.getByTestId('port-input')).toBeInTheDocument();
-    expect(screen.getByTestId('database-input')).toBeInTheDocument();
+    // Check SQL specific fields
+    await waitFor(() => {
+      expect(screen.getByTestId('dialect-select')).toBeInTheDocument();
+      expect(screen.getByTestId('host-input')).toBeInTheDocument();
+      expect(screen.getByTestId('port-input')).toBeInTheDocument();
+      expect(screen.getByTestId('database-input')).toBeInTheDocument();
+    });
   });
 
   it('validates required fields', async () => {
     const user = userEvent.setup();
     renderWithProviders(<DataSourceForm />);
 
-    // Try to submit without filling required fields
-    const submitButton = screen.getByTestId('submit-button');
-    await user.click(submitButton);
+    // Wait for form to be rendered
+    await waitFor(() => {
+      expect(screen.getByTestId('submit-button')).toBeInTheDocument();
+    });
 
-    // Check for validation messages
-    expect(await screen.findByText(/name is required/i)).toBeInTheDocument();
+    // Submit empty form
+    await user.click(screen.getByTestId('submit-button'));
+
+    // Check validation message
+    await waitFor(() => {
+      expect(screen.getByText(/name is required/i)).toBeInTheDocument();
+    }, { timeout: 3000 });
   });
 
   it('switches form fields when changing source type', async () => {
     const user = userEvent.setup();
     renderWithProviders(<DataSourceForm />);
 
-    // Find and click the type select trigger
+    // Wait for form to be rendered and verify SQL fields
+    await waitFor(() => {
+      expect(screen.getByTestId('type-select')).toBeInTheDocument();
+      expect(screen.getByTestId('dialect-select')).toBeInTheDocument();
+      expect(screen.getByTestId('host-input')).toBeInTheDocument();
+    });
+
+    // Change source type to API
     const typeSelect = screen.getByTestId('type-select');
     await user.click(typeSelect);
 
-    // Select the API option from the dropdown
-    const apiOption = screen.getByTestId('type-option-api');
-    await user.click(apiOption);
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /REST API/i })).toBeInTheDocument();
+    });
 
-    // SQL specific fields should not be visible
+    await user.click(screen.getByRole('option', { name: /REST API/i }));
+
+    // Verify SQL fields are hidden
     await waitFor(() => {
       expect(screen.queryByTestId('dialect-select')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('host-input')).not.toBeInTheDocument();
     });
   });
 
   it('successfully submits the form', async () => {
+    const mockApiResponse = {
+      ok: true,
+      json: () => Promise.resolve({ id: 1, name: 'Test DB', type: 'sql' })
+    };
+    (apiRequest as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockApiResponse);
+
     const user = userEvent.setup();
     renderWithProviders(<DataSourceForm />);
 
-    // Fill out the form
-    await user.type(screen.getByTestId('name-input'), 'Test DB');
+    // Wait for all form fields
+    await waitFor(() => {
+      expect(screen.getByTestId('name-input')).toBeInTheDocument();
+      expect(screen.getByTestId('host-input')).toBeInTheDocument();
+      expect(screen.getByTestId('database-input')).toBeInTheDocument();
+      expect(screen.getByTestId('port-input')).toBeInTheDocument();
+    });
 
-    // Fill required SQL fields
+    // Fill form fields
+    await user.type(screen.getByTestId('name-input'), 'Test DB');
     await user.type(screen.getByTestId('host-input'), 'localhost');
     await user.type(screen.getByTestId('database-input'), 'testdb');
-    await user.type(screen.getByTestId('port-input'), '5432');
 
-    // Submit the form
-    const submitButton = screen.getByTestId('submit-button');
-    await user.click(submitButton);
+    // Handle port input
+    const portInput = screen.getByTestId('port-input');
+    await user.clear(portInput);
+    await user.type(portInput, '5432');
 
-    // Verify the API was called with correct data
+    // Verify values
+    expect(screen.getByTestId('name-input')).toHaveValue('Test DB');
+    expect(screen.getByTestId('host-input')).toHaveValue('localhost');
+    expect(screen.getByTestId('database-input')).toHaveValue('testdb');
+    expect(screen.getByTestId('port-input')).toHaveDisplayValue('5432');
+
+    // Submit form
+    await user.click(screen.getByTestId('submit-button'));
+
+    // Verify API call
     await waitFor(() => {
-      expect(apiRequest).toHaveBeenCalledWith("POST", "/api/data-sources", expect.any(Object));
-    });
+      expect(apiRequest).toHaveBeenCalledWith(
+        "POST",
+        "/api/data-sources",
+        expect.objectContaining({
+          name: 'Test DB',
+          type: 'sql',
+          config: expect.objectContaining({
+            type: 'sql',
+            config: expect.objectContaining({
+              host: 'localhost',
+              database: 'testdb',
+              port: 5432
+            })
+          })
+        })
+      );
+    }, { timeout: 3000 });
   });
 });
