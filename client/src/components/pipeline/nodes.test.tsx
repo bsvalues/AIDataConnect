@@ -1,30 +1,20 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders } from '@/test-utils';
+import { screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SourceNode, TransformNode, FilterNode, JoinNode, OutputNode } from './nodes';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: false,
-    },
-  },
-});
-
-const renderWithProviders = (ui: React.ReactElement) => {
-  return render(
-    <QueryClientProvider client={queryClient}>
-      {ui}
-    </QueryClientProvider>
-  );
-};
 
 describe('Pipeline Nodes', () => {
-  beforeEach(() => {
-    queryClient.clear();
-    vi.clearAllMocks();
-  });
+  const defaultNodeProps = {
+    id: 'test-node',
+    selected: false,
+    type: 'default',
+    zIndex: 1,
+    isConnectable: true,
+    xPos: 0,
+    yPos: 0,
+    dragHandle: '.drag-handle'
+  };
 
   describe('SourceNode', () => {
     it('renders with correct label and handles', () => {
@@ -33,7 +23,7 @@ describe('Pipeline Nodes', () => {
         type: 'source'
       };
 
-      renderWithProviders(<SourceNode data={mockData} />);
+      renderWithProviders(<SourceNode data={mockData} {...defaultNodeProps} />);
 
       expect(screen.getByText('Test Source')).toBeInTheDocument();
       expect(screen.getByText('Data Source')).toBeInTheDocument();
@@ -53,7 +43,7 @@ describe('Pipeline Nodes', () => {
     };
 
     it('renders transform node with configuration', () => {
-      renderWithProviders(<TransformNode data={mockData} />);
+      renderWithProviders(<TransformNode data={mockData} {...defaultNodeProps} />);
 
       expect(screen.getByText('Test Transform')).toBeInTheDocument();
       expect(screen.getByText('Transform Data')).toBeInTheDocument();
@@ -64,7 +54,7 @@ describe('Pipeline Nodes', () => {
 
     it('opens configuration dialog when button clicked', async () => {
       const user = userEvent.setup();
-      renderWithProviders(<TransformNode data={mockData} />);
+      renderWithProviders(<TransformNode data={mockData} {...defaultNodeProps} />);
 
       const configButton = screen.getByRole('button', { name: /edit transform/i });
       await user.click(configButton);
@@ -74,8 +64,8 @@ describe('Pipeline Nodes', () => {
     });
 
     it('displays existing transformation code', () => {
-      renderWithProviders(<TransformNode data={mockData} />);
-      
+      renderWithProviders(<TransformNode data={mockData} {...defaultNodeProps} />);
+
       expect(screen.getByText('return data.map(x => x * 2)')).toBeInTheDocument();
     });
   });
@@ -87,7 +77,7 @@ describe('Pipeline Nodes', () => {
         type: 'filter'
       };
 
-      renderWithProviders(<FilterNode data={mockData} />);
+      renderWithProviders(<FilterNode data={mockData} {...defaultNodeProps} />);
 
       expect(screen.getByText('Test Filter')).toBeInTheDocument();
       expect(screen.getByText('Filter Data')).toBeInTheDocument();
@@ -104,7 +94,7 @@ describe('Pipeline Nodes', () => {
         type: 'join'
       };
 
-      renderWithProviders(<JoinNode data={mockData} />);
+      renderWithProviders(<JoinNode data={mockData} {...defaultNodeProps} />);
 
       expect(screen.getByText('Test Join')).toBeInTheDocument();
       expect(screen.getByText('Join Data')).toBeInTheDocument();
@@ -121,7 +111,7 @@ describe('Pipeline Nodes', () => {
         type: 'output'
       };
 
-      renderWithProviders(<OutputNode data={mockData} />);
+      renderWithProviders(<OutputNode data={mockData} {...defaultNodeProps} />);
 
       expect(screen.getByText('Test Output')).toBeInTheDocument();
       expect(screen.getByText('Output')).toBeInTheDocument();

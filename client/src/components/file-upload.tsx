@@ -1,7 +1,7 @@
 import { useCallback, useState, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Upload, Server, Lock } from "lucide-react";
+import { Upload, Server, Lock, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ACCEPTED_FILE_TYPES = {
@@ -27,10 +33,17 @@ const ACCEPTED_FILE_TYPES = {
   'application/msword': ['.doc'],
 };
 
+interface UploadError {
+  type: 'validation' | 'network' | 'ftp' | 'server';
+  message: string;
+}
+
 export function FileUpload() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [useFtp, setUseFtp] = useState(false);
+  const [uploadError, setUploadError] = useState<UploadError | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [ftpConfig, setFtpConfig] = useState({
     host: "",
     port: 2121,
@@ -40,9 +53,27 @@ export function FileUpload() {
     passive: true
   });
 
-  const validateFtpConfig = useCallback(() => {
+  const validateFile = useCallback((file: File): UploadError | null => {
+    if (file.size > MAX_FILE_SIZE) {
+      return {
+        type: 'validation',
+        message: `File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`
+      };
+    }
+
+    if (!Object.keys(ACCEPTED_FILE_TYPES).includes(file.type)) {
+      return {
+        type: 'validation',
+        message: `Invalid file type: ${file.type}. Supported types: ${Object.values(ACCEPTED_FILE_TYPES).flat().join(', ')}`
+      };
+    }
+
+    return null;
+  }, []);
+
+  const validateFtpConfig = useCallback((): string | null => {
     if (!ftpConfig.host) return "FTP host is required";
-    if (!ftpConfig.port || ftpConfig.port < 1) return "Invalid FTP port";
+    if (!ftpConfig.port || ftpConfig.port < 1 || ftpConfig.port > 65535) return "Invalid FTP port (1-65535)";
     if (!ftpConfig.user) return "FTP username is required";
     if (!ftpConfig.password) return "FTP password is required";
     return null;
@@ -50,17 +81,19 @@ export function FileUpload() {
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      const validationError = useFtp ? validateFtpConfig() : null;
-      if (validationError) {
-        throw new Error(validationError);
+      setUploadError(null);
+      setUploadProgress(0);
+
+      const fileError = validateFile(file);
+      if (fileError) {
+        throw new Error(fileError.message);
       }
 
-      if (file.size > MAX_FILE_SIZE) {
-        throw new Error(`File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`);
-      }
-
-      if (!Object.keys(ACCEPTED_FILE_TYPES).includes(file.type)) {
-        throw new Error("Invalid file type. Please upload a supported file type.");
+      if (useFtp) {
+        const ftpError = validateFtpConfig();
+        if (ftpError) {
+          throw new Error(ftpError);
+        }
       }
 
       const formData = new FormData();
@@ -73,29 +106,48 @@ export function FileUpload() {
 
       formData.append("transferType", uploadData.transferType);
       if (useFtp) {
-        const validationError = validateFtpConfig();
-        if (validationError) {
-          throw new Error(validationError);
-        }
-        formData.append("transferType", "ftp");
         formData.append("ftpConfig", JSON.stringify({
           ...ftpConfig,
           port: Number(ftpConfig.port)
         }));
       }
 
-      const res = await fetch("/api/files", {
-        method: "POST",
-        body: formData,
-        credentials: "include"
-      });
+      try {
+        const xhr = new XMLHttpRequest();
+        const promise = new Promise((resolve, reject) => {
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const progress = Math.round((event.loaded / event.total) * 100);
+              setUploadProgress(progress);
+            }
+          };
 
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Upload failed");
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(JSON.parse(xhr.response));
+            } else {
+              reject(new Error(xhr.response || 'Upload failed'));
+            }
+          };
+
+          xhr.onerror = () => {
+            reject(new Error('Network error occurred'));
+          };
+
+          xhr.open('POST', '/api/files');
+          xhr.send(formData);
+        });
+
+        const result = await promise;
+        setUploadProgress(100);
+        return result;
+      } catch (error: any) {
+        setUploadError({
+          type: error.message.includes('Network') ? 'network' : 'server',
+          message: error.message
+        });
+        throw error;
       }
-
-      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/files"] });
@@ -103,6 +155,7 @@ export function FileUpload() {
         title: "File uploaded successfully",
         description: useFtp ? "Your file has been uploaded via FTP and analyzed" : "Your file has been uploaded and analyzed"
       });
+      setUploadProgress(0);
     },
     onError: (error: Error) => {
       console.error('File upload error:', error);
@@ -111,25 +164,39 @@ export function FileUpload() {
         description: error.message,
         variant: "destructive"
       });
+      setUploadProgress(0);
     }
   });
 
   const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: any[]) => {
+    setUploadError(null);
+
     if (rejectedFiles.length > 0) {
-      const errors = rejectedFiles.map((file: any) => file.errors.map((err: any) => err.message).join(", ")).join("\n"); // Improved error handling
-      toast({
-        title: "Invalid file(s)", //Pluralized for multiple files
-        description: errors,
-        variant: "destructive"
+      const errors = rejectedFiles.map((file: any) => {
+        const errorMessages = file.errors.map((err: any) => {
+          switch (err.code) {
+            case 'file-too-large':
+              return `File "${file.file.name}" is too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB`;
+            case 'file-invalid-type':
+              return `File "${file.file.name}" has an invalid type. Supported types: ${Object.values(ACCEPTED_FILE_TYPES).flat().join(', ')}`;
+            default:
+              return err.message;
+          }
+        }).join(", ");
+        return errorMessages;
+      }).join("\n");
+
+      setUploadError({
+        type: 'validation',
+        message: errors
       });
       return;
     }
 
     if (acceptedFiles.length === 0) {
-      toast({
-        title: "Invalid file",
-        description: "Please select a valid file to upload",
-        variant: "destructive"
+      setUploadError({
+        type: 'validation',
+        message: "Please select a valid file to upload"
       });
       return;
     }
@@ -137,27 +204,18 @@ export function FileUpload() {
     if (useFtp) {
       const error = validateFtpConfig();
       if (error) {
-        toast({
-          title: "FTP Configuration Error",
-          description: error,
-          variant: "destructive"
+        setUploadError({
+          type: 'ftp',
+          message: error
         });
         return;
       }
     }
 
     acceptedFiles.forEach(file => {
-      if (file.size > MAX_FILE_SIZE) {
-        toast({
-          title: "File too large",
-          description: `File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`,
-          variant: "destructive"
-        });
-        return;
-      }
       uploadMutation.mutate(file);
     });
-  }, [uploadMutation, useFtp, validateFtpConfig, toast]);
+  }, [uploadMutation, useFtp, validateFtpConfig]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -174,6 +232,16 @@ export function FileUpload() {
 
   return (
     <div className="space-y-4">
+      {uploadError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Upload Error</AlertTitle>
+          <AlertDescription>
+            {uploadError.message}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex justify-between items-center">
         <div className="flex items-center space-x-2">
           <Switch
@@ -194,6 +262,9 @@ export function FileUpload() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>FTP Configuration</DialogTitle>
+                <DialogDescription>
+                  Configure your FTP connection settings for secure file transfers.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -277,7 +348,7 @@ export function FileUpload() {
       <div
         {...getRootProps()}
         className={cn(
-          "border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors",
+          "border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors relative",
           isDragActive ? "border-primary bg-primary/10" : "border-muted-foreground/20",
           uploadMutation.isPending && "opacity-50 cursor-not-allowed"
         )}
@@ -303,8 +374,16 @@ export function FileUpload() {
           </div>
         )}
         {uploadMutation.isPending && (
-          <div className="mt-4">
+          <div className="mt-4 space-y-2">
             <p>Uploading{useFtp ? " via FTP" : ""}...</p>
+            {uploadProgress > 0 && (
+              <div className="w-full bg-secondary rounded-full h-2.5">
+                <div
+                  className="bg-primary h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
