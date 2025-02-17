@@ -34,6 +34,8 @@ import {
   User
 } from "lucide-react";
 
+type SourceType = "sql" | "api" | "cloud_storage";
+
 const sourceTypes = [
   { 
     value: "sql", 
@@ -64,7 +66,7 @@ const sqlDialects = [
 export function DataSourceForm() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [sourceType, setSourceType] = useState("sql");
+  const [sourceType, setSourceType] = useState<SourceType>("sql");
 
   const form = useForm<InsertDataSource>({
     resolver: zodResolver(insertDataSourceSchema),
@@ -343,7 +345,7 @@ export function DataSourceForm() {
             <FormItem>
               <FormLabel>Type</FormLabel>
               <Select 
-                onValueChange={(value) => {
+                onValueChange={(value: SourceType) => {
                   field.onChange(value);
                   setSourceType(value);
                   form.reset({

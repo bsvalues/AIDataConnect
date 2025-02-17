@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart, FileText, Network } from "lucide-react";
@@ -8,6 +7,9 @@ export function MetricsCards() {
     queryKey: ["/api/analytics/metrics"],
     queryFn: async () => {
       const res = await fetch("/api/analytics/metrics");
+      if (!res.ok) {
+        throw new Error('Failed to fetch metrics');
+      }
       return res.json();
     }
   });
@@ -35,7 +37,7 @@ export function MetricsCards() {
           <Network className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{metrics.avgRagScore.toFixed(2)}</div>
+          <div className="text-2xl font-bold">{metrics.avgRagScore?.toFixed(2) ?? '0.00'}</div>
         </CardContent>
       </Card>
       <Card>

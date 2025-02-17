@@ -29,6 +29,7 @@ export interface IStorage {
   // Embedding operations
   createEmbedding(embedding: InsertEmbedding): Promise<Embedding>;
   getEmbeddingsByFileIds(fileIds: number[]): Promise<RagEmbedding[]>;
+  getAllEmbeddings(): Promise<Embedding[]>;
 
   // Pipeline operations
   createPipeline(pipeline: InsertPipeline): Promise<Pipeline>;
@@ -181,6 +182,10 @@ export class MemStorage implements IStorage {
         text: embedding.chunk,
         vector: JSON.parse(embedding.vector)
       }));
+  }
+
+  async getAllEmbeddings(): Promise<Embedding[]> {
+    return Array.from(this.embeddings.values());
   }
 
   // Pipeline operations
