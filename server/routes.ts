@@ -48,7 +48,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const transferType = req.body.transferType || "local";
-      const ftpConfig = req.body.ftpConfig ? JSON.parse(req.body.ftpConfig) : null;
+      const ftpConfig = transferType === "ftp" && req.body.ftpConfig ? JSON.parse(req.body.ftpConfig) : undefined;
 
       const fileData = insertFileSchema.parse({
         name: req.file.originalname,
