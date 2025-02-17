@@ -1,4 +1,4 @@
-import type { Express, Request } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import { storage } from "./storage";
@@ -7,7 +7,8 @@ import { insertFileSchema, insertDataSourceSchema } from "@shared/schema";
 import { ZodError } from "zod";
 import fs from "fs/promises";
 import path from 'path';
-import { FtpClient } from "./lib/ftp"; // Import from our FTP service module
+import { FtpClient } from "./lib/ftp";
+import logger from "./lib/logger";
 
 declare module 'express-serve-static-core' {
   interface Request {
@@ -354,6 +355,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
     }
+  });
+
+  // Handle root route first, before the 404 handler
+  app.get("/", (_req: Request, res: Response) => {
+    // In production, the index.html will be served by the static middleware
+    // In development, it will be handled by the Vite middleware
+    if (app.get("env") === "development") {
+      // Let Vite handle it
+      res.sendStatus(200);
+    } else {
+      // Serve the static index.html
+      res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+    }
+  });
+
+
+  // Add 404 handler - this should be after all other routes
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    logger.error("404 Not Found", {
+      metadata: {
+        path: req.originalUrl,
+        method: req.method,
+        userAgent: req.get('user-agent'),
+        ip: req.ip
+      }
+    });
+
+    // If API request, return JSON
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ 
+        message: "API endpoint not found",
+        path: req.path
+      });
+    }
+
+    // For web requests, return the 404 page
+    res.status(404).send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>404 - Page Not Found</title>
+        <style>
+          body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #f9fafb;
+          }
+          .container {
+            text-align: center;
+            padding: 2rem;
+          }
+          h1 { color: #111827; margin-bottom: 1rem; }
+          p { color: #6b7280; margin-bottom: 2rem; }
+          a {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 500;
+          }
+          a:hover { text-decoration: underline; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>404 Page Not Found</h1>
+          <p>The page you're looking for doesn't exist or has been moved.</p>
+          <a href="/">Return to Dashboard</a>
+        </div>
+      </body>
+      </html>
+    `);
+  });
+
+  // Error handler should be the last middleware
+  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
+
+    logger.error("Server error", {
+      metadata: {
+        status,
+        message,
+        stack: err.stack,
+        code: err.code,
+      },
+    });
+
+    res.status(status).json({ 
+      message,
+      ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
+    });
   });
 
   const httpServer = createServer(app);
