@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 
 import * as z from 'zod';
+import { ftpConfigSchema } from "@/lib/validations";
 
 type SourceType = "sql" | "api" | "cloud_storage";
 
@@ -64,6 +65,44 @@ const sqlDialects = [
   { value: "postgres", label: "PostgreSQL", icon: Database },
   { value: "mysql", label: "MySQL", icon: Database }
 ];
+
+const dataSourceSchema = insertDataSourceSchema.extend({
+  name: z.string().min(1, "Source name is required"),
+  config: z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("sql"),
+      config: sqlConfigSchema.extend({
+        dialect: z.enum(["sqlserver", "postgres", "mysql"]),
+        host: z.string().min(1, "Server name/IP is required"),
+        port: z.number()
+          .min(1, "Port must be between 1 and 65535")
+          .max(65535, "Port must be between 1 and 65535"),
+        database: z.string().min(1, "Database name is required"),
+        username: z.string().optional(),
+        password: z.string().optional(),
+        encrypt: z.boolean(),
+        trustedConnection: z.boolean(),
+        instanceName: z.string().optional(),
+      }).superRefine((data, ctx) => {
+        if (!data.trustedConnection && (!data.username || !data.password)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Username and password are required when not using Windows Authentication",
+            path: ["username"],
+          });
+        }
+      }),
+    }),
+    z.object({
+      type: z.literal("api"),
+      config: apiConfigSchema,
+    }),
+    z.object({
+      type: z.literal("cloud_storage"),
+      config: cloudStorageConfigSchema,
+    }),
+  ]),
+});
 
 export function DataSourceForm() {
   const { toast } = useToast();
@@ -108,9 +147,7 @@ export function DataSourceForm() {
   };
 
   const form = useForm<InsertDataSource>({
-    resolver: zodResolver(insertDataSourceSchema.extend({
-      name: z.string().min(1, "Source name is required")
-    })),
+    resolver: zodResolver(dataSourceSchema),
     defaultValues: {
       name: "",
       type: "sql",

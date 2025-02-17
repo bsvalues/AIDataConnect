@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DataSourceForm } from './data-source-form';
@@ -10,7 +10,6 @@ vi.mock('@/lib/queryClient', () => ({
   apiRequest: vi.fn()
 }));
 
-// Test query client setup
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -30,67 +29,83 @@ const renderForm = () => {
   );
 };
 
-describe('DataSourceForm', () => {
+describe('DataSourceForm Validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryClient.clear();
   });
 
-  it('renders basic form fields', () => {
-    renderForm();
-
-    expect(screen.getByTestId('data-source-form')).toBeInTheDocument();
-    expect(screen.getByTestId('name-input')).toBeInTheDocument();
-    expect(screen.getByTestId('type-select')).toBeInTheDocument();
-  });
-
-  it('shows validation errors on empty submission', async () => {
+  it('shows validation errors for empty required fields', async () => {
     const user = userEvent.setup();
     renderForm();
 
+    // Try to submit without filling any fields
     const submitButton = screen.getByTestId('submit-button');
     await user.click(submitButton);
 
-    // Check for the specific validation error message
-    const nameError = await screen.findByText('Source name is required', {}, { timeout: 2000 });
-    expect(nameError).toBeInTheDocument();
+    // Check for validation error messages
+    expect(await screen.findByText('Source name is required')).toBeInTheDocument();
+    expect(await screen.findByText('Server name/IP is required')).toBeInTheDocument();
+    expect(await screen.findByText('Database name is required')).toBeInTheDocument();
   });
 
-  it('shows SQL-specific fields by default', () => {
+  it('validates SQL credentials when not using trusted connection', async () => {
+    const user = userEvent.setup();
     renderForm();
 
-    expect(screen.getByTestId('dialect-select')).toBeInTheDocument();
-    expect(screen.getByTestId('host-input')).toBeInTheDocument();
-    expect(screen.getByTestId('port-input')).toBeInTheDocument();
-    expect(screen.getByTestId('database-input')).toBeInTheDocument();
+    // Fill required fields except credentials
+    await user.type(screen.getByTestId('name-input'), 'Test DB');
+    await user.type(screen.getByTestId('host-input'), 'localhost');
+    await user.type(screen.getByTestId('database-input'), 'testdb');
+
+    // Submit form
+    const submitButton = screen.getByTestId('submit-button');
+    await user.click(submitButton);
+
+    // Check for credential validation error
+    expect(await screen.findByText('Username and password are required when not using Windows Authentication')).toBeInTheDocument();
   });
 
-  it('submits form with correct data', async () => {
+  it('validates port number range', async () => {
+    const user = userEvent.setup();
+    renderForm();
+
+    // Try invalid port number
+    const portInput = screen.getByTestId('port-input');
+    await user.clear(portInput);
+    await user.type(portInput, '999999');
+
+    // Submit form
+    const submitButton = screen.getByTestId('submit-button');
+    await user.click(submitButton);
+
+    // Check for port validation error
+    expect(await screen.findByText('Port must be between 1 and 65535')).toBeInTheDocument();
+  });
+
+  it('accepts valid form submission', async () => {
     const mockApiResponse = { ok: true, json: () => Promise.resolve({ id: 1 }) };
     (apiRequest as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockApiResponse);
 
     const user = userEvent.setup();
     renderForm();
 
-    // Fill required fields
+    // Fill all required fields with valid data
     await user.type(screen.getByTestId('name-input'), 'Test DB');
     await user.type(screen.getByTestId('host-input'), 'localhost');
     await user.type(screen.getByTestId('database-input'), 'testdb');
-
-    // Set username and password since trustedConnection is false by default
     await user.type(screen.getByTestId('username-input'), 'testuser');
     await user.type(screen.getByTestId('password-input'), 'testpass');
 
-    // Handle port input
     const portInput = screen.getByTestId('port-input');
     await user.clear(portInput);
-    await user.type(portInput, '5432');
+    await user.type(portInput, '1433');
 
     // Submit form
     const submitButton = screen.getByTestId('submit-button');
     await user.click(submitButton);
 
-    // Wait for and verify API call
+    // Verify API call with valid data
     await waitFor(() => {
       expect(apiRequest).toHaveBeenCalledWith(
         'POST',
@@ -103,7 +118,7 @@ describe('DataSourceForm', () => {
             config: expect.objectContaining({
               host: 'localhost',
               database: 'testdb',
-              port: 5432,
+              port: 1433,
               username: 'testuser',
               password: 'testpass',
               trustedConnection: false
