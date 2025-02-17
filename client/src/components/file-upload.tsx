@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Upload, Server, Lock } from "lucide-react";
@@ -17,27 +17,44 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 export function FileUpload() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [useFtp, setUseFtp] = useState(false);
   const [ftpConfig, setFtpConfig] = useState({
     host: "",
-    port: 2121, // Updated to match our FTP server port
+    port: 2121,
     user: "",
     password: "",
     secure: true,
     passive: true
   });
 
+  const validateFtpConfig = useCallback(() => {
+    if (!ftpConfig.host) return "FTP host is required";
+    if (!ftpConfig.port || ftpConfig.port < 1) return "Invalid FTP port";
+    if (!ftpConfig.user) return "FTP username is required";
+    if (!ftpConfig.password) return "FTP password is required";
+    return null;
+  }, [ftpConfig]);
+
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      console.log('Starting file upload with FTP:', useFtp); // Debug log
+      const validationError = useFtp ? validateFtpConfig() : null;
+      if (validationError) {
+        throw new Error(validationError);
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        throw new Error(`File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`);
+      }
+
       const formData = new FormData();
       formData.append("file", file);
 
       if (useFtp) {
-        console.log('Adding FTP config:', { ...ftpConfig, password: '[REDACTED]' }); // Debug log
         formData.append("transferType", "ftp");
         formData.append("ftpConfig", JSON.stringify(ftpConfig));
       }
@@ -50,7 +67,7 @@ export function FileUpload() {
 
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.message);
+        throw new Error(error.message || "Upload failed");
       }
 
       return res.json();
@@ -63,7 +80,7 @@ export function FileUpload() {
       });
     },
     onError: (error: Error) => {
-      console.error('File upload error:', error); // Debug log
+      console.error('File upload error:', error);
       toast({
         title: "Error uploading file",
         description: error.message,
@@ -73,21 +90,44 @@ export function FileUpload() {
   });
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (useFtp && (!ftpConfig.host || !ftpConfig.user || !ftpConfig.password)) {
+    if (acceptedFiles.length === 0) {
       toast({
-        title: "FTP Configuration Required",
-        description: "Please configure FTP settings before uploading",
+        title: "Invalid file",
+        description: "Please select a valid file to upload",
         variant: "destructive"
       });
       return;
     }
 
+    if (useFtp) {
+      const error = validateFtpConfig();
+      if (error) {
+        toast({
+          title: "FTP Configuration Error",
+          description: error,
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
     acceptedFiles.forEach(file => {
+      if (file.size > MAX_FILE_SIZE) {
+        toast({
+          title: "File too large",
+          description: `File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`,
+          variant: "destructive"
+        });
+        return;
+      }
       uploadMutation.mutate(file);
     });
-  }, [uploadMutation, useFtp, ftpConfig]);
+  }, [uploadMutation, useFtp, validateFtpConfig, toast]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    maxSize: MAX_FILE_SIZE
+  });
 
   return (
     <div className="space-y-4">
@@ -119,9 +159,10 @@ export function FileUpload() {
                     value={ftpConfig.host}
                     onChange={(e) => setFtpConfig(prev => ({
                       ...prev,
-                      host: e.target.value
+                      host: e.target.value.trim()
                     }))}
                     placeholder="ftp.example.com"
+                    required
                   />
                 </div>
                 <div className="space-y-2">
@@ -131,9 +172,12 @@ export function FileUpload() {
                     value={ftpConfig.port}
                     onChange={(e) => setFtpConfig(prev => ({
                       ...prev,
-                      port: parseInt(e.target.value)
+                      port: parseInt(e.target.value) || 2121
                     }))}
                     placeholder="2121"
+                    required
+                    min={1}
+                    max={65535}
                   />
                 </div>
                 <div className="space-y-2">
@@ -142,8 +186,9 @@ export function FileUpload() {
                     value={ftpConfig.user}
                     onChange={(e) => setFtpConfig(prev => ({
                       ...prev,
-                      user: e.target.value
+                      user: e.target.value.trim()
                     }))}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
@@ -155,6 +200,7 @@ export function FileUpload() {
                       ...prev,
                       password: e.target.value
                     }))}
+                    required
                   />
                 </div>
                 <div className="flex items-center space-x-2">
@@ -200,6 +246,9 @@ export function FileUpload() {
         ) : (
           <div className="space-y-2">
             <p>Drag & drop files here, or click to select files</p>
+            <p className="text-sm text-muted-foreground">
+              Maximum file size: {MAX_FILE_SIZE / 1024 / 1024}MB
+            </p>
             {useFtp && (
               <p className="text-sm text-muted-foreground">
                 Files will be uploaded using FTP

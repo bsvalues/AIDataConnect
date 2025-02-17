@@ -160,7 +160,6 @@ export const pipelineEdgeSchema = z.object({
 });
 
 export const pipelineSchema = z.object({
-  id: serial("id").primaryKey(),
   name: z.string(),
   nodes: z.array(pipelineNodeSchema),
   edges: z.array(pipelineEdgeSchema),
@@ -168,6 +167,7 @@ export const pipelineSchema = z.object({
   createdAt: z.date().optional()
 });
 
+// Pipeline table definition using Drizzle
 export const pipelines = pgTable("pipelines", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),

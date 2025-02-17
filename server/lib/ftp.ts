@@ -1,5 +1,5 @@
 import { Client } from "basic-ftp";
-import { FtpSrv } from "ftp-srv";
+import { FtpSrv, FtpServer } from "ftp-srv";
 import { storage } from "../storage";
 import type { File } from "@shared/schema";
 import path from "path";
@@ -7,58 +7,63 @@ import fs from "fs/promises";
 
 // FTP Server configuration
 const tryPorts = [2121, 2122, 2123, 2124];
-const ftpServer = new FtpSrv({
-  url: process.env.FTP_URL || `ftp://0.0.0.0:${tryPorts[0]}`,
-  anonymous: false,
-  greeting: ["Welcome to RAG Drive FTP Server"],
-  pasv_url: process.env.PASV_URL || "127.0.0.1",
-  pasv_min: 1024,
-  pasv_max: 2048,
-  tls: process.env.NODE_ENV === "production" ? {
-    key: process.env.FTP_TLS_KEY,
-    cert: process.env.FTP_TLS_CERT
-  } : undefined,
-  timeout: 30000,
-});
+let ftpServer: FtpServer;
 
-// Handle FTP authentication
-ftpServer.on("login", async ({ username, password }, resolve, reject) => {
-  try {
-    // TODO: Replace with actual user authentication
-    if (username === "admin" && password === "password") {
-      const uploadsDir = await ensureUploadsDirectory();
-      resolve({ root: uploadsDir });
-    } else {
-      reject(new Error("Invalid credentials"));
-    }
-  } catch (error) {
-    console.error("FTP login error:", error);
-    reject(new Error("Authentication failed"));
-  }
-});
-
-ftpServer.on("client-error", ({ connection, context, error }) => {
-  console.error(`FTP client error [${context}]:`, error);
-});
+function createFtpServer(port: number): FtpServer {
+  return new FtpSrv({
+    url: `ftp://0.0.0.0:${port}`,
+    anonymous: false,
+    greeting: ["Welcome to RAG Drive FTP Server"],
+    pasv_url: process.env.PASV_URL || "127.0.0.1",
+    pasv_min: 1024,
+    pasv_max: 2048,
+    tls: process.env.NODE_ENV === "production" ? {
+      key: process.env.FTP_TLS_KEY,
+      cert: process.env.FTP_TLS_CERT
+    } : undefined,
+    timeout: 30000,
+  });
+}
 
 // Start FTP server
 export async function startFtpServer() {
   for (const port of tryPorts) {
     try {
-      ftpServer.url = `ftp://0.0.0.0:${port}`;
+      ftpServer = createFtpServer(port);
+
+      // Handle FTP authentication
+      ftpServer.on("login", async ({ username, password }, resolve, reject) => {
+        try {
+          // TODO: Replace with actual user authentication
+          if (username === "admin" && password === "password") {
+            const uploadsDir = await ensureUploadsDirectory();
+            resolve({ root: uploadsDir });
+          } else {
+            reject(new Error("Invalid credentials"));
+          }
+        } catch (error) {
+          console.error("FTP login error:", error);
+          reject(new Error("Authentication failed"));
+        }
+      });
+
+      ftpServer.on("client-error", ({ connection, context, error }) => {
+        console.error(`FTP client error [${context}]:`, error);
+      });
+
       await ftpServer.listen();
       console.log(`FTP Server is running on port ${port}`);
       return;
-    } catch (err) {
-      if (err.code === 'EADDRINUSE') {
+    } catch (error: any) {
+      if (error?.code === 'EADDRINUSE') {
         if (port === tryPorts[tryPorts.length - 1]) {
           console.warn("All FTP ports in use, skipping FTP server startup");
           return;
         }
         continue;
       }
-      console.error("Error starting FTP server:", err);
-      throw err;
+      console.error("Error starting FTP server:", error);
+      throw error;
     }
   }
 }
