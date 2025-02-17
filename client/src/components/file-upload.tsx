@@ -103,9 +103,9 @@ export function FileUpload() {
 
   const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: any[]) => {
     if (rejectedFiles.length > 0) {
-      const errors = rejectedFiles[0].errors.map((err: any) => err.message).join(", ");
+      const errors = rejectedFiles.map((file: any) => file.errors.map((err: any) => err.message).join(", ")).join("\n"); // Improved error handling
       toast({
-        title: "Invalid file",
+        title: "Invalid file(s)", //Pluralized for multiple files
         description: errors,
         variant: "destructive"
       });
@@ -149,7 +149,8 @@ export function FileUpload() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     maxSize: MAX_FILE_SIZE,
-    accept: Object.keys(ACCEPTED_FILE_TYPES).map(key => `${key}`).join(',')
+    accept: ACCEPTED_FILE_TYPES,
+    multiple: false
   });
 
   const supportedFileTypes = useMemo(() => {
@@ -160,7 +161,7 @@ export function FileUpload() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex justify-between items-center">
         <div className="flex items-center space-x-2">
           <Switch
             id="use-ftp"
