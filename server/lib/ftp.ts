@@ -17,54 +17,63 @@ function createFtpServer(port: number): FtpServer {
     pasv_url: process.env.PASV_URL || "127.0.0.1",
     pasv_min: 1024,
     pasv_max: 2048,
-    tls: process.env.NODE_ENV === "production" ? {
-      key: process.env.FTP_TLS_KEY,
-      cert: process.env.FTP_TLS_CERT
-    } : undefined,
+    tls: {
+      key: process.env.FTP_TLS_KEY || '',
+      cert: process.env.FTP_TLS_CERT || ''
+    },
     timeout: 30000,
   });
 }
 
 // Start FTP server
 export async function startFtpServer() {
-  for (const port of tryPorts) {
-    try {
-      ftpServer = createFtpServer(port);
-
-      // Handle FTP authentication
-      ftpServer.on("login", async ({ username, password }, resolve, reject) => {
-        try {
-          // TODO: Replace with actual user authentication
-          if (username === "admin" && password === "password") {
-            const uploadsDir = await ensureUploadsDirectory();
-            resolve({ root: uploadsDir });
-          } else {
-            reject(new Error("Invalid credentials"));
-          }
-        } catch (error) {
-          console.error("FTP login error:", error);
-          reject(new Error("Authentication failed"));
-        }
-      });
-
-      ftpServer.on("client-error", ({ connection, context, error }) => {
-        console.error(`FTP client error [${context}]:`, error);
-      });
-
-      await ftpServer.listen();
-      console.log(`FTP Server is running on port ${port}`);
-      return;
-    } catch (error: any) {
-      if (error?.code === 'EADDRINUSE') {
-        if (port === tryPorts[tryPorts.length - 1]) {
-          console.warn("All FTP ports in use, skipping FTP server startup");
-          return;
-        }
-        continue;
-      }
-      console.error("Error starting FTP server:", error);
-      throw error;
+  try {
+    // Check for required environment variables
+    if (!process.env.FTP_USER || !process.env.FTP_PASS) {
+      throw new Error("FTP_USER and FTP_PASS environment variables are required");
     }
+
+    for (const port of tryPorts) {
+      try {
+        ftpServer = createFtpServer(port);
+
+        // Handle FTP authentication
+        ftpServer.on("login", async ({ username, password }, resolve, reject) => {
+          try {
+            if (username === process.env.FTP_USER && password === process.env.FTP_PASS) {
+              const uploadsDir = await ensureUploadsDirectory();
+              resolve({ root: uploadsDir });
+            } else {
+              reject(new Error("Invalid credentials"));
+            }
+          } catch (error) {
+            console.error("FTP login error:", error);
+            reject(new Error("Authentication failed"));
+          }
+        });
+
+        ftpServer.on("client-error", ({ connection, context, error }) => {
+          console.error(`FTP client error [${context}]:`, error);
+        });
+
+        await ftpServer.listen();
+        console.log(`FTP Server is running on port ${port}`);
+        return;
+      } catch (error: any) {
+        if (error?.code === 'EADDRINUSE') {
+          if (port === tryPorts[tryPorts.length - 1]) {
+            console.warn("All FTP ports in use, skipping FTP server startup");
+            return;
+          }
+          continue;
+        }
+        console.error("Error starting FTP server:", error);
+        throw error;
+      }
+    }
+  } catch (error) {
+    console.error("Failed to start FTP server:", error);
+    throw error;
   }
 }
 
@@ -77,7 +86,7 @@ export class FtpClient {
     this.client.ftp.verbose = true;
   }
 
-  async connect(host: string, port: number, user: string, password: string, secure = false): Promise<void> {
+  async connect(host: string, port: number, user: string, password: string, secure = true): Promise<void> {
     try {
       const config = {
         host,
@@ -86,7 +95,7 @@ export class FtpClient {
         password,
         secure,
         secureOptions: secure ? {
-          rejectUnauthorized: false // Allow self-signed certificates in development
+          rejectUnauthorized: process.env.NODE_ENV === 'production'
         } : undefined,
       };
 
@@ -101,6 +110,7 @@ export class FtpClient {
 
   async uploadFile(localPath: string, remotePath: string): Promise<void> {
     try {
+      await fs.access(localPath);
       console.log(`Uploading file from ${localPath} to ${remotePath}`);
       await this.client.uploadFrom(localPath, remotePath);
       console.log("File uploaded successfully");
@@ -115,6 +125,7 @@ export class FtpClient {
       console.log(`Downloading file from ${remotePath} to ${localPath}`);
       await this.client.downloadTo(localPath, remotePath);
       console.log("File downloaded successfully");
+      await fs.access(localPath);
     } catch (error: unknown) {
       console.error("FTP download error:", error);
       throw new Error(`Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -133,11 +144,11 @@ export class FtpClient {
 
 // Helper function to ensure uploads directory exists
 export async function ensureUploadsDirectory() {
-  const uploadsDir = "./uploads";
+  const uploadsDir = path.resolve("./uploads");
   try {
     await fs.access(uploadsDir);
   } catch {
-    await fs.mkdir(uploadsDir);
+    await fs.mkdir(uploadsDir, { recursive: true });
   }
   return uploadsDir;
 }
