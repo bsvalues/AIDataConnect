@@ -25,6 +25,16 @@ app.use(errorLogger);
     const server = await registerRoutes(app);
     logger.info("Express routes registered successfully");
 
+    // Setup Vite or static serving before error handlers
+    if (app.get("env") === "development") {
+      logger.info("Setting up Vite middleware...");
+      await setupVite(app, server);
+      logger.info("Vite middleware setup complete");
+    } else {
+      serveStatic(app);
+    }
+
+    // Error handling middleware
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
@@ -41,14 +51,6 @@ app.use(errorLogger);
         ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
       });
     });
-
-    if (app.get("env") === "development") {
-      logger.info("Setting up Vite middleware...");
-      await setupVite(app, server);
-      logger.info("Vite middleware setup complete");
-    } else {
-      serveStatic(app);
-    }
 
     // Use port 5000 to match workflow expectations
     const PORT = process.env.PORT ? parseInt(process.env.PORT) : 5000;
