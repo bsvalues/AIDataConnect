@@ -10,6 +10,7 @@ const tryPorts = [2121, 2122, 2123, 2124];
 let ftpServer: FtpServer;
 
 function createFtpServer(port: number): FtpServer {
+  console.log("Creating FTP server with configuration...");
   return new FtpSrv({
     url: `ftp://0.0.0.0:${port}`,
     anonymous: false,
@@ -17,10 +18,6 @@ function createFtpServer(port: number): FtpServer {
     pasv_url: process.env.PASV_URL || "127.0.0.1",
     pasv_min: 1024,
     pasv_max: 2048,
-    tls: {
-      key: process.env.FTP_TLS_KEY || '',
-      cert: process.env.FTP_TLS_CERT || ''
-    },
     timeout: 30000,
   });
 }
@@ -29,21 +26,26 @@ function createFtpServer(port: number): FtpServer {
 export async function startFtpServer() {
   try {
     // Check for required environment variables
+    console.log("Checking FTP environment variables...");
     if (!process.env.FTP_USER || !process.env.FTP_PASS) {
       throw new Error("FTP_USER and FTP_PASS environment variables are required");
     }
 
     for (const port of tryPorts) {
       try {
+        console.log(`Attempting to start FTP server on port ${port}...`);
         ftpServer = createFtpServer(port);
 
         // Handle FTP authentication
         ftpServer.on("login", async ({ username, password }, resolve, reject) => {
+          console.log(`Login attempt for user: ${username}`);
           try {
             if (username === process.env.FTP_USER && password === process.env.FTP_PASS) {
               const uploadsDir = await ensureUploadsDirectory();
+              console.log("Login successful, resolving with uploads directory");
               resolve({ root: uploadsDir });
             } else {
+              console.log("Invalid credentials provided");
               reject(new Error("Invalid credentials"));
             }
           } catch (error) {
@@ -61,6 +63,7 @@ export async function startFtpServer() {
         return;
       } catch (error: any) {
         if (error?.code === 'EADDRINUSE') {
+          console.log(`Port ${port} is in use, trying next port...`);
           if (port === tryPorts[tryPorts.length - 1]) {
             console.warn("All FTP ports in use, skipping FTP server startup");
             return;
@@ -75,6 +78,19 @@ export async function startFtpServer() {
     console.error("Failed to start FTP server:", error);
     throw error;
   }
+}
+
+// Helper function to ensure uploads directory exists
+export async function ensureUploadsDirectory() {
+  const uploadsDir = path.resolve("./uploads");
+  try {
+    await fs.access(uploadsDir);
+    console.log("Uploads directory exists at:", uploadsDir);
+  } catch {
+    console.log("Creating uploads directory at:", uploadsDir);
+    await fs.mkdir(uploadsDir, { recursive: true });
+  }
+  return uploadsDir;
 }
 
 // Enhanced FTP Client for uploading/downloading files
@@ -140,15 +156,4 @@ export class FtpClient {
       console.error("Error closing FTP connection:", error);
     }
   }
-}
-
-// Helper function to ensure uploads directory exists
-export async function ensureUploadsDirectory() {
-  const uploadsDir = path.resolve("./uploads");
-  try {
-    await fs.access(uploadsDir);
-  } catch {
-    await fs.mkdir(uploadsDir, { recursive: true });
-  }
-  return uploadsDir;
 }
