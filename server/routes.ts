@@ -50,7 +50,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const transferType = req.body.transferType || "local";
       let ftpConfig = null;
-      
+
       if (transferType === "ftp" && req.body.ftpConfig) {
         try {
           ftpConfig = JSON.parse(req.body.ftpConfig);
@@ -250,8 +250,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const metrics = {
         totalProcessedFiles: files.length,
-        avgRagScore: embeddings.length > 0 ? 
-          embeddings.reduce((acc, curr) => acc + (curr.performance?.score || 0), 0) / embeddings.length : 
+        avgRagScore: embeddings.length > 0 ?
+          embeddings.reduce((acc, curr) => acc + (curr.performance?.score || 0), 0) / embeddings.length :
           0,
         transformationCount: pipelines.reduce((acc, curr) => acc + (curr.transformations?.length || 0), 0)
       };
@@ -266,7 +266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const files = await storage.getFilesByUser(1);
       const now = new Date();
-      const last7Days = Array.from({length: 7}, (_, i) => {
+      const last7Days = Array.from({ length: 7 }, (_, i) => {
         const date = new Date(now);
         date.setDate(date.getDate() - i);
         return date.toISOString().split('T')[0];
@@ -359,17 +359,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Handle root route first, before the 404 handler
   app.get("/", (_req: Request, res: Response) => {
-    // In production, the index.html will be served by the static middleware
-    // In development, it will be handled by the Vite middleware
-    if (app.get("env") === "development") {
-      // Let Vite handle it
+    // In development, let Vite handle serving the index.html
+    // In production, serve the static index.html
+    if (process.env.NODE_ENV === "development") {
+      // Pass through to Vite middleware
       res.sendStatus(200);
     } else {
-      // Serve the static index.html
-      res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+      // Serve the static build
+      const indexPath = path.join(__dirname, "../client/dist/index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send("Application not built. Please run npm run build first.");
+      }
     }
   });
 
+  // Add a catch-all route for client-side routing
+  app.get("/api/*", (_req: Request, res: Response) => {
+    res.status(404).json({ message: "API endpoint not found" });
+  });
+
+  // Let the frontend handle all other routes for client-side routing
+  app.get("*", (_req: Request, res: Response) => {
+    if (process.env.NODE_ENV === "development") {
+      res.sendStatus(200); // Let Vite handle it
+    } else {
+      res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+    }
+  });
 
   // Add 404 handler - this should be after all other routes
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -384,7 +402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     // If API request, return JSON
     if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         message: "API endpoint not found",
         path: req.path
       });
@@ -447,7 +465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       },
     });
 
-    res.status(status).json({ 
+    res.status(status).json({
       message,
       ...(process.env.NODE_ENV === 'development' ? { stack: err.stack } : {})
     });
