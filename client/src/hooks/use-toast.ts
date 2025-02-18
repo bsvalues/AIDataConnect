@@ -6,7 +6,7 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 5000
 
 type ToasterToast = ToastProps & {
   id: string
@@ -22,30 +22,24 @@ const actionTypes = {
   REMOVE_TOAST: "REMOVE_TOAST",
 } as const
 
-let count = 0
-
-function genId() {
-  count = (count + 1) % Number.MAX_SAFE_INTEGER
-  return count.toString()
-}
-
 type ActionType = typeof actionTypes
+type ActionTypeValues = ActionType[keyof ActionType]
 
 type Action =
   | {
-      type: ActionType["ADD_TOAST"]
+      type: ActionTypeValues; //using the new type here
       toast: ToasterToast
     }
   | {
-      type: ActionType["UPDATE_TOAST"]
+      type: ActionTypeValues; //using the new type here
       toast: Partial<ToasterToast>
     }
   | {
-      type: ActionType["DISMISS_TOAST"]
+      type: ActionTypeValues; //using the new type here
       toastId?: ToasterToast["id"]
     }
   | {
-      type: ActionType["REMOVE_TOAST"]
+      type: ActionTypeValues; //using the new type here
       toastId?: ToasterToast["id"]
     }
 
@@ -90,8 +84,6 @@ export const reducer = (state: State, action: Action): State => {
     case "DISMISS_TOAST": {
       const { toastId } = action
 
-      // ! Side effects ! - This could be extracted into a dismissToast() action,
-      // but I'll keep it here for simplicity
       if (toastId) {
         addToRemoveQueue(toastId)
       } else {
@@ -167,6 +159,13 @@ function toast({ ...props }: Toast) {
     update,
   }
 }
+
+function genId() {
+  count = (count + 1) % Number.MAX_SAFE_INTEGER
+  return count.toString()
+}
+
+let count = 0
 
 function useToast() {
   const [state, setState] = React.useState<State>(memoryState)
