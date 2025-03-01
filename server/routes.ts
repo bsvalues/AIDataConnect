@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
-import { storage } from "./storage";
+import { storage } from "./storage-manager";
 import { analyzeFile, searchFiles, suggestTransformations, processDocumentForRag, findSimilarChunks, generateRagResponse, analyzeRagPerformance } from "./lib/openai";
 import { insertFileSchema, insertDataSourceSchema } from "@shared/schema";
 import { ZodError } from "zod";

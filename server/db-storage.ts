@@ -189,7 +189,13 @@ export class DbStorage implements IStorage {
   // Pipeline operations
   async createPipeline(pipeline: InsertPipeline): Promise<Pipeline> {
     try {
-      const result = await db.insert(pipelines).values(pipeline).returning();
+      // Ensure nodes and edges are properly set (not undefined)
+      const pipelineToInsert = {
+        ...pipeline,
+        nodes: pipeline.nodes || [],
+        edges: pipeline.edges || []
+      };
+      const result = await db.insert(pipelines).values(pipelineToInsert).returning();
       return result[0];
     } catch (error) {
       logger.error("Database error in createPipeline", { error, pipeline });

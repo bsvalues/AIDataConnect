@@ -193,7 +193,10 @@ export class MemStorage implements IStorage {
     const id = this.currentIds.pipelines++;
     const pipeline: Pipeline = {
       id,
-      ...insertPipeline,
+      name: insertPipeline.name,
+      nodes: insertPipeline.nodes || [],
+      edges: insertPipeline.edges || [],
+      userId: insertPipeline.userId,
       createdAt: new Date()
     };
     this.pipelines.set(id, pipeline);
@@ -229,4 +232,4 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// The MemStorage class is already exported as part of the main exports
