@@ -357,35 +357,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Handle root route first, before the 404 handler
-  app.get("/", (_req: Request, res: Response) => {
-    // In development, let Vite handle serving the index.html
-    // In production, serve the static index.html
-    if (process.env.NODE_ENV === "development") {
-      // Pass through to Vite middleware
-      res.sendStatus(200);
-    } else {
-      // Serve the static build
-      const indexPath = path.join(__dirname, "../client/dist/index.html");
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
-        res.status(404).send("Application not built. Please run npm run build first.");
-      }
-    }
-  });
-
-  // Add a catch-all route for client-side routing
+  // Handle API 404 routes
   app.get("/api/*", (_req: Request, res: Response) => {
     res.status(404).json({ message: "API endpoint not found" });
   });
-
-  // Let the frontend handle all other routes for client-side routing
-  app.get("*", (_req: Request, res: Response) => {
-    if (process.env.NODE_ENV === "development") {
-      res.sendStatus(200); // Let Vite handle it
+  
+  // Let the Vite middleware or static file serving handle all client-side routes
+  // Important: Remove explicit handling of the root route to allow Vite to properly serve the React app
+  // This needs to be AFTER all API routes but BEFORE the 404 handler
+  app.get("*", (_req: Request, res: Response, next: NextFunction) => {
+    // In development mode, let Vite handle routing
+    // In production, serve the static files
+    if (process.env.NODE_ENV !== "development") {
+      const staticPath = path.join(__dirname, "../client/dist", "index.html");
+      if (fs.existsSync(staticPath)) {
+        res.sendFile(staticPath);
+      } else {
+        next(); // Let the 404 handler take care of it
+      }
     } else {
-      res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+      // In development, Vite handles this through its middleware
+      next();
     }
   });
 
