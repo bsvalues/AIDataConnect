@@ -149,27 +149,20 @@ function PublicRoute({ component: Component }: { component: React.ComponentType 
 }
 
 function AppLayout() {
-  // TEMPORARY: Authentication is bypassed, so hiding user-specific elements
-  // const { logout, user } = useAuth();
+  const { logout, user } = useAuth();
   
   return (
     <div className="flex min-h-screen">
       <aside className="w-64 border-r bg-background">
         <div className="p-6 border-b">
           <h1 className="text-xl font-bold">RAG Drive</h1>
-          <div className="mt-2 text-sm text-muted-foreground">
-            Development Mode
-          </div>
-          {/* Original user display
           {user && (
             <div className="mt-2 text-sm text-muted-foreground">
               Logged in as: {user.username}
             </div>
           )}
-          */}
         </div>
         <SidebarNav />
-        {/* Hiding logout button during development
         <div className="p-4 mt-auto border-t">
           <Button 
             variant="outline" 
@@ -180,7 +173,6 @@ function AppLayout() {
             Logout
           </Button>
         </div>
-        */}
       </aside>
       <main className="flex-1 p-6">
         <Suspense fallback={<PageLoader />}>
