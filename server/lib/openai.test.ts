@@ -4,7 +4,11 @@ const {
   generateEmbedding,
   processDocumentForRag,
   findSimilarChunks,
-  generateRagResponse
+  generateRagResponse,
+  analyzeRagPerformance,
+  analyzeFile,
+  searchFiles,
+  suggestTransformations
 } = openaiModule;
 
 // Mock OpenAI
@@ -20,7 +24,7 @@ vi.mock('openai', () => {
         completions: {
           create: vi.fn().mockImplementation(({ messages }: { messages: Array<{role: string, content: string}> }) => {
             // Return JSON for analyzeRagPerformance calls
-            if (messages.some(msg => msg.content.includes('analyze'))) {
+            if (messages.some(msg => msg.content.includes('analyze') && msg.content.includes('RAG'))) {
               return Promise.resolve({
                 choices: [
                   {
@@ -29,6 +33,68 @@ vi.mock('openai', () => {
                         contextRelevance: 0.8,
                         responseQuality: 0.9,
                         suggestedImprovements: ["Improve context retrieval", "Add more sources"]
+                      })
+                    }
+                  }
+                ]
+              });
+            }
+            
+            // Return JSON for analyzeFile calls
+            if (messages.some(msg => msg.content.includes('Analyze the file content'))) {
+              return Promise.resolve({
+                choices: [
+                  {
+                    message: {
+                      content: JSON.stringify({
+                        summary: 'Test summary',
+                        category: 'Test category',
+                        keyInsights: ['insight 1', 'insight 2'],
+                        sentiment: 'positive'
+                      })
+                    }
+                  }
+                ]
+              });
+            }
+            
+            // Return JSON for searchFiles calls
+            if (messages.some(msg => msg.content.includes('search query') || msg.content.includes('rank them by relevance'))) {
+              return Promise.resolve({
+                choices: [
+                  {
+                    message: {
+                      content: JSON.stringify({
+                        results: [
+                          { id: 1, relevance: 0.9 },
+                          { id: 2, relevance: 0.7 }
+                        ]
+                      })
+                    }
+                  }
+                ]
+              });
+            }
+            
+            // Return JSON for suggestTransformations calls
+            if (messages.some(msg => msg.content.includes('transformation'))) {
+              return Promise.resolve({
+                choices: [
+                  {
+                    message: {
+                      content: JSON.stringify({
+                        transformations: [
+                          {
+                            name: 'Remove duplicates',
+                            description: 'Remove duplicate entries from the data',
+                            transformation: 'data.filter((value, index, self) => self.indexOf(value) === index)'
+                          },
+                          {
+                            name: 'Convert to uppercase',
+                            description: 'Convert all string values to uppercase',
+                            transformation: 'data.map(item => typeof item === "string" ? item.toUpperCase() : item)'
+                          }
+                        ]
                       })
                     }
                   }
@@ -144,12 +210,86 @@ describe('OpenAI Utilities', () => {
       
       vi.spyOn(openaiModule, 'analyzeRagPerformance').mockResolvedValue(mockResult);
       
-      const result = await openaiModule.analyzeRagPerformance(query, response, context);
+      const result = await openaiModule.analyzeRagPerformance(query, context, response);
       
       expect(result).toHaveProperty('contextRelevance');
       expect(result).toHaveProperty('responseQuality');
       expect(result).toHaveProperty('suggestedImprovements');
       expect(typeof result.contextRelevance).toBe('number');
+    });
+  });
+
+  describe('analyzeFile', () => {
+    it('should analyze file content and return summary and category', async () => {
+      // Mock the OpenAI response
+      vi.spyOn(openaiModule, 'analyzeFile').mockResolvedValue({
+        summary: 'Test summary',
+        category: 'Test category',
+        keyInsights: ['insight 1', 'insight 2'],
+        sentiment: 'positive'
+      });
+
+      const content = 'This is test file content';
+      const result = await analyzeFile(content);
+
+      expect(result).toHaveProperty('summary');
+      expect(result).toHaveProperty('category');
+      expect(result).toHaveProperty('keyInsights');
+      expect(result).toHaveProperty('sentiment');
+      expect(Array.isArray(result.keyInsights)).toBe(true);
+      expect(typeof result.sentiment).toBe('string');
+    });
+  });
+
+  describe('searchFiles', () => {
+    it('should search files based on query and return results', async () => {
+      // Mock the implementation
+      vi.spyOn(openaiModule, 'searchFiles').mockResolvedValue([
+        { id: 1, relevance: 0.9 },
+        { id: 2, relevance: 0.7 }
+      ]);
+
+      const query = 'test query';
+      const files = [
+        { name: 'file1.txt', content: 'This is file 1 content' },
+        { name: 'file2.txt', content: 'This is file 2 content' }
+      ];
+
+      const results = await searchFiles(query, files);
+
+      expect(Array.isArray(results)).toBe(true);
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]).toHaveProperty('id');
+      expect(results[0]).toHaveProperty('relevance');
+      expect(typeof results[0].relevance).toBe('number');
+    });
+  });
+
+  describe('suggestTransformations', () => {
+    it('should suggest transformations for data', async () => {
+      // Mock the OpenAI response
+      vi.spyOn(openaiModule, 'suggestTransformations').mockResolvedValue([
+        {
+          name: 'Remove duplicates',
+          description: 'Remove duplicate entries from the data',
+          transformation: 'data.filter((value, index, self) => self.indexOf(value) === index)'
+        },
+        {
+          name: 'Convert to uppercase',
+          description: 'Convert all string values to uppercase',
+          transformation: 'data.map(item => typeof item === "string" ? item.toUpperCase() : item)'
+        }
+      ]);
+
+      const data = ['test', 'data', 'test'];
+      const results = await suggestTransformations(data);
+
+      expect(Array.isArray(results)).toBe(true);
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]).toHaveProperty('name');
+      expect(results[0]).toHaveProperty('description');
+      expect(results[0]).toHaveProperty('transformation');
+      expect(typeof results[0].transformation).toBe('string');
     });
   });
 });
