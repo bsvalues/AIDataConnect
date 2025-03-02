@@ -286,7 +286,13 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
 
   app.get("/api/files", isAuthenticated, async (req, res) => {
     try {
-      const files = await storage.getFilesByUser(req.session.userId);
+      // Ensure userId exists (should be guaranteed by isAuthenticated middleware)
+      const userId = req.session.userId;
+      if (userId === undefined) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const files = await storage.getFilesByUser(userId);
       res.json(files);
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
@@ -340,7 +346,14 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
       if (!query) {
         return res.status(400).json({ message: "Query is required" });
       }
-      const files = await storage.getFilesByUser(req.session.userId);
+      
+      // Ensure userId exists
+      const userId = req.session.userId;
+      if (userId === undefined) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const files = await storage.getFilesByUser(userId);
       const filesWithContent = files.map(f => ({
         name: f.name,
         content: f.aiSummary || ""
@@ -368,7 +381,13 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
 
   app.get("/api/data-sources", isAuthenticated, async (req, res) => {
     try {
-      const sources = await storage.getDataSourcesByUser(req.session.userId);
+      // Ensure userId exists
+      const userId = req.session.userId;
+      if (userId === undefined) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const sources = await storage.getDataSourcesByUser(userId);
       res.json(sources);
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
@@ -459,7 +478,12 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
 
   app.get("/api/analytics/metrics", isAuthenticated, async (req, res) => {
     try {
+      // Ensure userId exists
       const userId = req.session.userId;
+      if (userId === undefined) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
       const files = await storage.getFilesByUser(userId);
       const embeddings = await storage.getAllEmbeddings();
       const pipelines = await storage.getPipelinesByUser(userId);
@@ -484,7 +508,12 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
 
   app.get("/api/analytics/usage", isAuthenticated, async (req, res) => {
     try {
+      // Ensure userId exists
       const userId = req.session.userId;
+      if (userId === undefined) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
       const files = await storage.getFilesByUser(userId);
       const now = new Date();
       const last7Days = Array.from({ length: 7 }, (_, i) => {
@@ -555,7 +584,13 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
 
   app.get("/api/pipelines", isAuthenticated, async (req, res) => {
     try {
-      const pipelines = await storage.getPipelinesByUser(req.session.userId);
+      // Ensure userId exists
+      const userId = req.session.userId;
+      if (userId === undefined) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const pipelines = await storage.getPipelinesByUser(userId);
       res.json(pipelines);
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
