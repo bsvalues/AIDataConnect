@@ -1,409 +1,303 @@
-# RAG Drive FTP Hub Deployment Guide
+# RAG Drive FTP Hub - Deployment Guide
 
-This comprehensive guide provides step-by-step instructions for deploying the RAG Drive FTP Hub application to various environments.
+This guide provides step-by-step instructions for deploying the RAG Drive FTP Hub application to production environments.
 
-## Table of Contents
+## Prerequisites
 
-1. [System Requirements](#system-requirements)
-2. [Environment Setup](#environment-setup)
-3. [Configuration](#configuration)
-4. [Database Setup](#database-setup)
-5. [Standard Deployment](#standard-deployment)
-6. [Docker Deployment](#docker-deployment)
-7. [Scaling Considerations](#scaling-considerations)
-8. [Monitoring and Maintenance](#monitoring-and-maintenance)
-9. [Troubleshooting](#troubleshooting)
+Before deploying, ensure you have:
 
-## System Requirements
+- Access to the production environment
+- Database credentials for production
+- API keys for external services (OpenAI, Slack, etc.)
+- SSL certificates for secure connections
+- Docker installed (if using containerized deployment)
+- Node.js v20.x and npm installed
+- PostgreSQL v15.x or higher
 
-### Minimum Requirements
+## Deployment Options
 
-- **CPU:** 2 cores
-- **RAM:** 4GB
-- **Storage:** 20GB SSD
-- **Operating System:** Ubuntu 20.04 LTS or later, Debian 11 or later
-- **Node.js:** v20.x or later
-- **PostgreSQL:** v15.x or later
+The RAG Drive FTP Hub can be deployed using one of the following methods:
 
-### Recommended for Production
+### Option 1: Docker Deployment (Recommended)
 
-- **CPU:** 4+ cores
-- **RAM:** 8GB+
-- **Storage:** 50GB+ SSD
-- **Operating System:** Ubuntu 22.04 LTS
-- **Node.js:** v20.x LTS
-- **PostgreSQL:** v16.x
-- **Docker:** Latest stable version
-- **Docker Compose:** Latest stable version
-
-## Environment Setup
-
-### Required Software
-
-1. **Node.js and npm:**
+1. **Clone the Repository**
    ```bash
-   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-   sudo apt-get install -y nodejs
+   git clone https://github.com/your-org/rag-drive-ftphub.git
+   cd rag-drive-ftphub
    ```
 
-2. **PostgreSQL:**
+2. **Configure Environment Variables**
    ```bash
-   sudo apt-get install postgresql postgresql-contrib
+   cp .env.example .env
+   # Edit .env with production values
    ```
 
-3. **Docker and Docker Compose (Optional for containerized deployment):**
+3. **Build and Run with Docker Compose**
    ```bash
-   # Install Docker
-   curl -fsSL https://get.docker.com -o get-docker.sh
-   sudo sh get-docker.sh
-   
-   # Install Docker Compose
-   sudo apt-get install docker-compose-plugin
+   docker-compose build
+   docker-compose up -d
    ```
 
-4. **Git:**
+4. **Verify Deployment**
    ```bash
-   sudo apt-get install git
+   docker-compose logs -f
+   # Check application logs for successful startup
    ```
 
-### Obtaining the Application
+### Option 2: Manual Deployment
 
-1. **Clone the repository:**
+1. **Clone the Repository**
    ```bash
-   git clone https://github.com/yourusername/ragdrive-ftp-hub.git
-   cd ragdrive-ftp-hub
+   git clone https://github.com/your-org/rag-drive-ftphub.git
+   cd rag-drive-ftphub
    ```
 
-2. **Install dependencies:**
+2. **Configure Environment Variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with production values
+   ```
+
+3. **Install Dependencies**
    ```bash
    npm install
    ```
 
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file in the root directory with the following variables:
-
-```
-# Database
-DATABASE_URL=postgres://username:password@localhost:5432/ragdrive
-
-# Server
-PORT=5000
-NODE_ENV=production
-SESSION_SECRET=your-secure-session-secret
-
-# OpenAI API (for AI features)
-OPENAI_API_KEY=your-openai-api-key
-
-# Optional: Slack notifications
-SLACK_WEBHOOK_URL=your-slack-webhook-url
-```
-
-### SSL Certificates (for Production)
-
-For secure FTP connections, generate or obtain SSL certificates:
-
-```bash
-# Create directory for certificates
-mkdir -p ./certs
-
-# Generate self-signed certificates (for testing only)
-openssl req -x509 -newkey rsa:4096 -keyout ./certs/ftp-private.key -out ./certs/ftp-cert.pem -days 365 -nodes
-```
-
-For production, replace with proper certificates from a trusted certificate authority.
-
-## Database Setup
-
-### Creating the Database
-
-1. **Log in to PostgreSQL:**
+4. **Build the Application**
    ```bash
-   sudo -u postgres psql
+   npm run build
    ```
 
-2. **Create database and user:**
-   ```sql
-   CREATE USER ragdrive WITH PASSWORD 'secure-password';
-   CREATE DATABASE ragdrive OWNER ragdrive;
-   \q
-   ```
-
-3. **Update the DATABASE_URL in your .env file:**
-   ```
-   DATABASE_URL=postgres://ragdrive:secure-password@localhost:5432/ragdrive
-   ```
-
-### Initializing the Schema
-
-1. **Push the schema to the database:**
+5. **Set Up the Database**
    ```bash
    npm run db:push
    ```
 
-## Standard Deployment
-
-### For Development/Testing
-
-1. **Build the application:**
+6. **Start the Application**
    ```bash
-   npm run build
-   ```
-
-2. **Start the application:**
-   ```bash
-   npm run dev
-   ```
-
-### For Production
-
-1. **Use our automated deployment script:**
-   ```bash
-   ./scripts/deploy.sh
-   ```
-
-   This script will:
-   - Run the deployment readiness check
-   - Backup the database
-   - Build the application
-   - Restart the server
-   - Verify the deployment
-
-2. **Alternative: Manual deployment:**
-   ```bash
-   # Run deployment readiness check
-   ./scripts/deployment-readiness.sh
-   
-   # Backup the database
-   ./scripts/db-backup.sh pre_deploy
-   
-   # Build the application
-   npm run build
-   
-   # Start the server
    npm run start
    ```
 
-### Setting Up as a System Service
+## Environment Variables
 
-For long-running production deployments, set up as a systemd service:
+The following environment variables must be configured:
 
-1. **Create service file:**
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `NODE_ENV` | Environment mode | `production` |
+| `PORT` | Port to run the server on | `3000` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:password@localhost:5432/database` |
+| `SESSION_SECRET` | Secret for session cookies | `your-secure-session-secret` |
+| `OPENAI_API_KEY` | OpenAI API key for RAG features | `sk-...` |
+| `SLACK_API_TOKEN` | Slack API token for notifications | `xoxb-...` |
+| `FTP_USER` | Default FTP username | `ftpuser` |
+| `FTP_PASSWORD` | Default FTP password | `secure-password` |
+| `FTP_PORT` | FTP server port | `21` |
+| `SSL_CERT_PATH` | Path to SSL certificate | `/path/to/cert.pem` |
+| `SSL_KEY_PATH` | Path to SSL private key | `/path/to/key.pem` |
+
+## Post-Deployment Steps
+
+After deploying the application, complete these steps:
+
+1. **Run Database Migrations**
+   The database schema should be automatically updated during deployment, but verify it:
    ```bash
-   sudo nano /etc/systemd/system/ragdrive.service
+   npm run db:push
    ```
 
-2. **Add service configuration:**
-   ```
-   [Unit]
-   Description=RAG Drive FTP Hub
-   After=network.target postgresql.service
-   
-   [Service]
-   Type=simple
-   User=yourusername
-   WorkingDirectory=/path/to/ragdrive-ftp-hub
-   ExecStart=/usr/bin/npm run start
-   Restart=on-failure
-   Environment=NODE_ENV=production
-   
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-3. **Enable and start the service:**
+2. **Verify Application Health**
+   Access the application health endpoint:
    ```bash
-   sudo systemctl enable ragdrive
-   sudo systemctl start ragdrive
+   curl https://your-domain.com/api/health
    ```
 
-## Docker Deployment
-
-### Using Docker Compose
-
-1. **Build and start containers:**
+3. **Create Admin User**
+   If this is a fresh installation, create an admin user:
    ```bash
-   docker-compose up -d
+   npm run create-admin
    ```
 
-2. **Alternative: Use our deployment script:**
+4. **Configure Monitoring**
+   Set up monitoring and alerting:
    ```bash
-   ./scripts/deploy.sh
+   ./scripts/setup-monitoring.sh
    ```
 
-### Manual Container Management
-
-1. **Build the Docker image:**
+5. **Set Up Backups**
+   Configure automated backups:
    ```bash
-   docker build -t ragdrive-app .
-   ```
-
-2. **Run the container:**
-   ```bash
-   docker run -d --name ragdrive \
-     -p 5000:5000 -p 21:21 \
-     --env-file .env \
-     --restart unless-stopped \
-     ragdrive-app
+   ./scripts/setup-backups.sh
    ```
 
 ## Scaling Considerations
 
+The RAG Drive FTP Hub can be scaled in several ways:
+
 ### Horizontal Scaling
 
-For handling increased load:
-
-1. **Use a load balancer** (like Nginx or HAProxy) in front of multiple application instances
-2. **Set up database replication** for read scalability
-3. **Use Redis** for session storage and caching
-
-Example Nginx configuration for load balancing:
-
-```nginx
-upstream ragdrive {
-    server app1.example.com:5000;
-    server app2.example.com:5000;
-    server app3.example.com:5000;
-}
-
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://ragdrive;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-```
+To handle increased load:
+- Deploy multiple application instances behind a load balancer
+- Configure sticky sessions for user authentication
+- Ensure the database can handle the increased connection load
 
 ### Vertical Scaling
 
-Increase resources on the existing server:
+For higher performance on a single node:
+- Increase CPU and memory resources
+- Optimize the Node.js garbage collection settings
+- Increase database connection pool size
 
-1. **Upgrade CPU and RAM** on the host machine
-2. **Optimize PostgreSQL** configuration for larger memory footprint
-3. **Increase Node.js memory limits** with `--max-old-space-size` flag
+### Database Scaling
 
-## Monitoring and Maintenance
-
-### Regular Maintenance Tasks
-
-1. **Database backups:**
-   ```bash
-   # Create a daily backup (consider setting up as a cron job)
-   ./scripts/db-backup.sh daily_backup
-   ```
-
-2. **Log rotation:**
-   ```bash
-   # Install logrotate if not already present
-   sudo apt-get install logrotate
-   
-   # Create logrotate configuration
-   sudo nano /etc/logrotate.d/ragdrive
-   ```
-   
-   Add configuration:
-   ```
-   /path/to/ragdrive-ftp-hub/logs/*.log {
-       daily
-       rotate 14
-       compress
-       delaycompress
-       missingok
-       notifempty
-       create 0640 yourusername yourusername
-   }
-   ```
-
-3. **System updates:**
-   ```bash
-   sudo apt update
-   sudo apt upgrade
-   ```
-
-### Monitoring
-
-1. **Application logs:**
-   ```bash
-   # View recent logs
-   tail -f ./logs/combined.log
-   
-   # View error logs
-   tail -f ./logs/error.log
-   ```
-
-2. **Server status:**
-   ```bash
-   # For systemd service
-   sudo systemctl status ragdrive
-   
-   # For Docker
-   docker ps | grep ragdrive
-   docker logs ragdrive
-   ```
-
-3. **Database health:**
-   ```bash
-   # Connect to database
-   psql $DATABASE_URL
-   
-   # Run basic health check
-   SELECT version();
-   SELECT count(*) FROM users;
-   ```
+For improved database performance:
+- Use connection pooling
+- Consider read replicas for heavy read workloads
+- Implement database sharding for very large installations
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### Database Connection Problems
+1. **Database Connection Failures**
+   - Verify DATABASE_URL is correct
+   - Check database server is running
+   - Ensure network allows connections
 
-**Symptoms:** Application fails to start with database connection errors
+2. **Application Startup Failures**
+   - Check logs for error messages
+   - Verify all required environment variables are set
+   - Confirm port is not already in use
 
-**Solutions:**
-- Verify PostgreSQL is running: `sudo systemctl status postgresql`
-- Check DATABASE_URL environment variable
-- Ensure the database user has proper permissions
-- Test connection manually: `psql $DATABASE_URL`
-
-#### Application Crashes
-
-**Symptoms:** Application stops unexpectedly or fails to start
-
-**Solutions:**
-- Check application logs in `./logs/error.log`
-- Ensure all required environment variables are set
-- Verify Node.js version compatibility
-- Check for port conflicts: `sudo lsof -i:5000`
-
-#### FTP Connection Issues
-
-**Symptoms:** Unable to connect via FTP client
-
-**Solutions:**
-- Verify port 21 is open in firewall: `sudo ufw status`
-- Check SSL certificates are correctly configured
-- Ensure FTP service is running (check logs)
-- Test with a basic FTP client: `ftp localhost 21`
+3. **FTP Connection Issues**
+   - Verify FTP_PORT is open in the firewall
+   - Check SSL certificates are valid
+   - Ensure uploads directory is writable
 
 ### Getting Help
 
-If you encounter persistent issues:
+If you encounter issues not covered in this guide:
+- Check the logs at `./logs/combined.log` and `./logs/error.log`
+- Run the diagnostics script: `./scripts/diagnose.sh`
+- Contact support at support@ragdrive-ftphub.com
 
-1. Check the [deployment checklist](./deployment_checklist.md)
-2. Review the application logs
-3. Contact the development team with:
-   - Error logs
-   - Environment details (OS, Node.js version, etc.)
-   - Steps to reproduce the issue
+## Version Updates
+
+When updating to a new version:
+
+1. **Back Up Data**
+   ```bash
+   ./scripts/db-backup.sh
+   ```
+
+2. **Pull Latest Code**
+   ```bash
+   git pull origin main
+   ```
+
+3. **Update Dependencies**
+   ```bash
+   npm install
+   ```
+
+4. **Rebuild Application**
+   ```bash
+   npm run build
+   ```
+
+5. **Restart Services**
+   ```bash
+   # For Docker deployment
+   docker-compose down
+   docker-compose up -d
+   
+   # For manual deployment
+   npm run restart
+   ```
+
+## Rollback Procedure
+
+If you need to roll back to a previous version:
+
+1. **Stop the Current Version**
+   ```bash
+   # For Docker deployment
+   docker-compose down
+   
+   # For manual deployment
+   npm run stop
+   ```
+
+2. **Restore Database**
+   ```bash
+   ./scripts/db-restore.sh backup_filename.sql
+   ```
+
+3. **Check Out Previous Version**
+   ```bash
+   git checkout v1.x.x
+   ```
+
+4. **Rebuild and Restart**
+   ```bash
+   npm install
+   npm run build
+   
+   # For Docker deployment
+   docker-compose up -d
+   
+   # For manual deployment
+   npm run start
+   ```
+
+## Security Considerations
+
+### Production Hardening
+
+1. **Set Secure HTTP Headers**
+   - Ensure proper Content-Security-Policy
+   - Enable Strict-Transport-Security
+   - Configure X-Content-Type-Options
+
+2. **Restrict Network Access**
+   - Use firewall to limit access to application ports
+   - Implement IP allowlisting where appropriate
+   - Keep the database in a private network
+
+3. **Regular Updates**
+   - Keep dependencies up to date
+   - Apply security patches promptly
+   - Run regular security scans
+
+## Maintenance
+
+### Regular Maintenance Tasks
+
+1. **Database Optimization**
+   Run weekly:
+   ```bash
+   ./scripts/optimize-db.js
+   ```
+
+2. **Log Rotation**
+   Configure logrotate or run:
+   ```bash
+   ./scripts/rotate-logs.sh
+   ```
+
+3. **Performance Monitoring**
+   Check performance dashboard:
+   ```bash
+   ./scripts/performance-dashboard.js
+   ```
+
+4. **Security Scans**
+   Run monthly:
+   ```bash
+   npm audit
+   ./scripts/security-scan.sh
+   ```
 
 ---
 
-This guide is maintained as part of the RAG Drive FTP Hub project. For the latest updates, refer to the project repository.
-
-*Last updated: March 2, 2025*
+For additional deployment assistance, contact the DevOps team or refer to internal documentation.

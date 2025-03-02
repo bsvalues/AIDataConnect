@@ -1,4 +1,4 @@
-FROM node:20-slim AS builder
+FROM node:20-alpine as builder
 
 # Set working directory
 WORKDIR /app
@@ -9,14 +9,17 @@ COPY package*.json ./
 # Install dependencies
 RUN npm ci
 
-# Copy source code
+# Copy source files
 COPY . .
 
 # Build the application
 RUN npm run build
 
+# Remove development dependencies
+RUN npm prune --production
+
 # Production stage
-FROM node:20-slim AS production
+FROM node:20-alpine
 
 # Set working directory
 WORKDIR /app
@@ -24,24 +27,35 @@ WORKDIR /app
 # Set environment variables
 ENV NODE_ENV=production
 
-# Copy package files and install production dependencies
-COPY package*.json ./
-RUN npm ci --omit=dev
+# Copy built assets from the builder stage
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/client/dist ./client/dist
+COPY --from=builder /app/server ./server
+COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/scripts ./scripts
 
-# Copy built application from builder stage
-COPY --from=builder /app/dist ./dist
+# Copy configuration files
+COPY --from=builder /app/tsconfig.json ./
+COPY --from=builder /app/drizzle.config.ts ./
+COPY --from=builder /app/.env.example ./
 
-# Copy necessary files for runtime
-COPY .env.example ./.env.example
+# Create uploads and logs directories
+RUN mkdir -p uploads logs
 
-# Create uploads directory
-RUN mkdir -p uploads && chmod 755 uploads
+# Expose ports
+EXPOSE 3000
+EXPOSE 21
 
-# Create logs directory
-RUN mkdir -p logs && chmod 755 logs
+# Create a non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 -G nodejs
 
-# Expose port
-EXPOSE 5000
+# Set proper ownership
+RUN chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
 
 # Start the application
-CMD ["node", "dist/index.js"]
+CMD ["node", "server/index.js"]

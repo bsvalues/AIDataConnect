@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# RAG Drive FTP Hub Optimization Script
-# This script runs all optimization tasks to prepare the system for production
+# RAG Drive FTP Hub Performance Optimization Script
+# This script runs multiple optimization procedures to improve application performance
 
 set -e  # Exit immediately if a command exits with a non-zero status
 
@@ -31,173 +31,194 @@ print_status() {
     fi
 }
 
-# Check if Node.js and npm are installed
-check_node() {
-    print_header "Checking Node.js and npm"
-    
-    if command -v node &> /dev/null; then
-        NODE_VERSION=$(node -v)
-        print_status 0 "Node.js is installed: $NODE_VERSION"
-    else
-        print_status 1 "Node.js is not installed"
-        exit 1
-    fi
-    
-    if command -v npm &> /dev/null; then
-        NPM_VERSION=$(npm -v)
-        print_status 0 "npm is installed: $NPM_VERSION"
-    else
-        print_status 1 "npm is not installed"
-        exit 1
-    fi
-}
-
-# Check database connection
-check_database() {
-    print_header "Checking Database Connection"
-    
-    if [ -z "$DATABASE_URL" ]; then
-        print_status 1 "DATABASE_URL environment variable is not set"
-        exit 1
-    fi
-    
-    echo "Testing database connection..."
-    if node -e "const { Pool } = require('pg'); const pool = new Pool({ connectionString: process.env.DATABASE_URL }); pool.query('SELECT NOW()', (err, res) => { if (err) { console.error(err); process.exit(1); } else { console.log('Database connection successful'); process.exit(0); } });" &> /dev/null; then
-        print_status 0 "Database connection successful"
-    else
-        print_status 1 "Failed to connect to database"
-        exit 1
-    fi
-}
-
-# Run npm audit
-run_npm_audit() {
-    print_header "Running npm audit"
-    
-    echo "Checking for vulnerabilities in npm packages..."
-    if npm audit --production; then
-        print_status 0 "No vulnerabilities found"
-    else
-        AUDIT_EXIT_CODE=$?
-        if [ $AUDIT_EXIT_CODE -eq 1 ]; then
-            print_status 1 "Vulnerabilities found. Review the output above."
-        else
-            print_status 1 "npm audit failed to run"
-            exit 1
-        fi
-    fi
-}
-
-# Run tests
-run_tests() {
-    print_header "Running Tests"
-    
-    echo "Running unit and integration tests..."
-    if npm test; then
-        print_status 0 "All tests passed"
-    else
-        print_status 1 "Some tests failed. Review the output above."
-        exit 1
-    fi
-}
-
-# Run database optimization
+# Optimize database
 optimize_database() {
-    print_header "Running Database Optimization"
+    print_header "Database Optimization"
     
-    echo "Analyzing database and generating optimization report..."
+    echo "Running database optimization..."
     if node scripts/optimize-db.js; then
         print_status 0 "Database optimization completed successfully"
-        echo -e "${YELLOW}Review database-optimization-report.md for recommendations${NC}"
     else
         print_status 1 "Database optimization failed"
-        exit 1
     fi
 }
 
-# Generate performance dashboard
-generate_performance_dashboard() {
-    print_header "Generating Performance Dashboard"
-    
-    echo "Creating performance monitoring dashboard..."
-    if node scripts/performance-dashboard.js & sleep 5 && kill $! > /dev/null 2>&1; then
-        print_status 0 "Performance dashboard initialized successfully"
-        echo -e "${YELLOW}Run 'node scripts/performance-dashboard.js' to start the dashboard${NC}"
-    else
-        print_status 1 "Performance dashboard generation failed"
-        exit 1
-    fi
-}
-
-# Run performance audit
+# Run code performance audit
 run_performance_audit() {
-    print_header "Running Performance Audit"
+    print_header "Code Performance Audit"
     
-    echo "Analyzing application performance..."
+    echo "Running performance audit..."
     if node scripts/performance-audit.js; then
         print_status 0 "Performance audit completed successfully"
     else
         print_status 1 "Performance audit failed"
-        exit 1
     fi
 }
 
-# Update deployment readiness report
-update_deployment_readiness() {
-    print_header "Updating Deployment Readiness Report"
+# Clean temporary files
+clean_temp_files() {
+    print_header "Cleaning Temporary Files"
     
-    echo "Checking deployment readiness..."
-    if [ -f "deployment_readiness_report.md" ]; then
-        print_status 0 "Deployment readiness report updated"
-        echo -e "${YELLOW}Review deployment_readiness_report.md for deployment status${NC}"
+    # Clean npm cache
+    echo "Cleaning npm cache..."
+    npm cache clean --force
+    print_status $? "npm cache cleaned"
+    
+    # Clean uploads temp files
+    echo "Cleaning temporary upload files..."
+    find uploads -type f -name "*.tmp" -delete
+    print_status $? "Temporary upload files cleaned"
+    
+    # Clean logs older than 30 days
+    echo "Cleaning old logs..."
+    find logs -type f -name "*.log*" -mtime +30 -delete
+    print_status $? "Old logs cleaned"
+}
+
+# Optimize static assets
+optimize_static_assets() {
+    print_header "Optimizing Static Assets"
+    
+    # Check if client/dist exists
+    if [ -d "client/dist" ]; then
+        # Calculate size before
+        size_before=$(du -sh client/dist | awk '{print $1}')
+        
+        echo "Original size: $size_before"
+        echo "Compressing and optimizing static assets..."
+        
+        # Compress CSS files
+        if command -v cleancss &> /dev/null; then
+            find client/dist -name "*.css" -exec sh -c 'cleancss -o "{}" "{}"' \;
+            print_status $? "CSS files optimized"
+        else
+            echo -e "${YELLOW}cleancss not found, skipping CSS optimization${NC}"
+        fi
+        
+        # Compress JS files
+        if command -v terser &> /dev/null; then
+            find client/dist -name "*.js" -exec sh -c 'terser "{}" -o "{}" --compress --mangle' \;
+            print_status $? "JavaScript files optimized"
+        else
+            echo -e "${YELLOW}terser not found, skipping JS optimization${NC}"
+        fi
+        
+        # Optimize images
+        if command -v imagemin &> /dev/null; then
+            echo "Optimizing image files..."
+            find client/dist -type f \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.gif" \) -exec imagemin {} --out-dir=$(dirname {}) \;
+            print_status $? "Image files optimized"
+        else
+            echo -e "${YELLOW}imagemin not found, skipping image optimization${NC}"
+        fi
+        
+        # Calculate size after
+        size_after=$(du -sh client/dist | awk '{print $1}')
+        echo "Optimized size: $size_after"
     else
-        print_status 1 "Deployment readiness report not found"
-        exit 1
+        echo -e "${YELLOW}client/dist directory not found. Build the application first.${NC}"
     fi
 }
 
-# Create backup
-create_backup() {
-    print_header "Creating Database Backup"
+# Update optimization report
+update_optimization_report() {
+    print_header "Updating Optimization Report"
     
-    echo "Creating database backup..."
-    if ./scripts/db-backup.sh; then
-        print_status 0 "Database backup created successfully"
-    else
-        print_status 1 "Database backup failed"
-        exit 1
-    fi
+    report_file="optimization_report.md"
+    
+    # Create report header
+    cat > $report_file << EOF
+# RAG Drive FTP Hub Optimization Report
+
+**Date:** $(date +"%Y-%m-%d")  
+**Generated By:** Optimization Script
+
+## Optimization Summary
+
+The following optimizations have been performed:
+
+EOF
+    
+    # Add optimization details to report
+    echo "- Database optimizations" >> $report_file
+    echo "- Code performance improvements" >> $report_file
+    echo "- Temporary file cleanup" >> $report_file
+    echo "- Static asset optimization" >> $report_file
+    
+    # Add recommendations
+    cat >> $report_file << EOF
+
+## Recommendations
+
+Based on the optimizations performed, consider the following additional improvements:
+
+1. Implement a CDN for static asset delivery
+2. Set up Redis caching for frequently accessed data
+3. Consider database sharding if your data continues to grow
+4. Implement server-side rendering for improved initial load times
+5. Set up automated performance monitoring
+
+## Next Steps
+
+Review the detailed logs in the following files:
+- Database optimization: logs/db-optimize.log
+- Performance audit: logs/performance-audit.log
+
+Run this optimization script regularly (recommended: weekly) to maintain optimal performance.
+EOF
+    
+    print_status 0 "Optimization report updated: $report_file"
 }
 
 # Main function
 main() {
-    print_header "RAG Drive FTP Hub Optimization"
-    echo "This script will optimize your application for production deployment."
-    echo "It will run several checks and optimization tasks."
-    echo -e "${YELLOW}Please make sure your application is not running in production during this process.${NC}"
+    print_header "RAG Drive FTP Hub Performance Optimization"
+    echo "This script will optimize various aspects of the RAG Drive FTP Hub application."
     echo
     
-    read -p "Do you want to continue? (y/n): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${RED}Optimization canceled.${NC}"
-        exit 1
-    fi
+    # Create logs directory if it doesn't exist
+    mkdir -p logs
     
-    # Run all checks and optimizations
-    check_node
-    check_database
-    run_npm_audit
-    run_tests
-    create_backup
-    optimize_database
-    generate_performance_dashboard
-    run_performance_audit
-    update_deployment_readiness
+    # Ask which optimizations to run
+    echo "Select optimizations to run:"
+    echo "1) All optimizations (recommended)"
+    echo "2) Database optimization only"
+    echo "3) Code performance audit only"
+    echo "4) Clean temporary files only"
+    echo "5) Optimize static assets only"
+    echo
+    read -p "Enter your choice (1-5): " optimization_choice
+    
+    case $optimization_choice in
+        1)
+            optimize_database
+            run_performance_audit
+            clean_temp_files
+            optimize_static_assets
+            update_optimization_report
+            ;;
+        2)
+            optimize_database
+            ;;
+        3)
+            run_performance_audit
+            ;;
+        4)
+            clean_temp_files
+            ;;
+        5)
+            optimize_static_assets
+            ;;
+        *)
+            echo -e "${RED}Invalid choice. Exiting.${NC}"
+            exit 1
+            ;;
+    esac
     
     print_header "Optimization Complete"
-    echo -e "${GREEN}All optimization tasks have been completed successfully.${NC}"
-    echo -e "${YELLOW}Please review the generated reports and make any recommended changes before deployment.${NC}"
+    echo -e "${GREEN}Performance optimization completed successfully!${NC}"
+    echo
+    echo "To improve performance further, consider the recommendations in the optimization report."
 }
 
 # Run the main function

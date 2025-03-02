@@ -3,90 +3,83 @@
 # RAG Drive FTP Hub Database Backup Script
 # This script creates a backup of the PostgreSQL database
 
-# Exit on error
-set -e
+# Source environment variables if .env file exists
+if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
 
-# Configuration
-TIMESTAMP=$(date +%Y%m%d%H%M%S)
+# Default values if not set in .env
+DB_USER=${POSTGRES_USER:-postgres}
+DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+DB_NAME=${POSTGRES_DB:-ragdrivedb}
+DB_HOST=${POSTGRES_HOST:-localhost}
+DB_PORT=${POSTGRES_PORT:-5432}
+
+# Create backup directory if it doesn't exist
 BACKUP_DIR="./backups"
+mkdir -p $BACKUP_DIR
+
+# Generate backup filename with date and time
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_FILE="$BACKUP_DIR/ragdrive_db_backup_$TIMESTAMP.sql"
-LOG_FILE="./logs/db-backup.log"
 
-# Create necessary directories
-mkdir -p "$BACKUP_DIR"
-mkdir -p ./logs
+# Colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-# Log function
-log() {
-  local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
-  echo "[$timestamp] $1" | tee -a "$LOG_FILE"
-}
+# Display backup information
+echo -e "${YELLOW}Creating database backup...${NC}"
+echo "Database: $DB_NAME"
+echo "Host: $DB_HOST:$DB_PORT"
+echo "Output file: $BACKUP_FILE"
 
-log "Starting database backup process..."
-
-# Check if DATABASE_URL is set
-if [ -z "$DATABASE_URL" ]; then
-  # Try to load from .env file
-  if [ -f ".env" ]; then
-    source .env
-  fi
-  
-  if [ -z "$DATABASE_URL" ]; then
-    log "ERROR: DATABASE_URL environment variable is not set."
-    exit 1
-  fi
+# Check if we're running in Docker environment
+if [ -n "$(command -v docker)" ] && [ -n "$(docker ps -q -f name=rag-drive-db)" ]; then
+    echo -e "${YELLOW}Using Docker container for backup...${NC}"
+    docker exec rag-drive-db pg_dump -U $DB_USER -F c $DB_NAME > "$BACKUP_FILE"
+    RESULT=$?
+else
+    # Check if pg_dump is installed
+    if ! command -v pg_dump &> /dev/null; then
+        echo -e "${RED}Error: pg_dump command not found. Please install PostgreSQL client tools.${NC}"
+        exit 1
+    fi
+    
+    # Create backup using pg_dump
+    PGPASSWORD=$DB_PASSWORD pg_dump -h $DB_HOST -p $DB_PORT -U $DB_USER -F c $DB_NAME > "$BACKUP_FILE"
+    RESULT=$?
 fi
-
-# Extract database connection details from DATABASE_URL
-DB_HOST=$(echo $DATABASE_URL | sed -n 's/.*@\([^:]*\).*/\1/p')
-DB_PORT=$(echo $DATABASE_URL | sed -n 's/.*:\([0-9]*\)\/.*/\1/p')
-DB_NAME=$(echo $DATABASE_URL | sed -n 's/.*\/\([^?]*\).*/\1/p')
-DB_USER=$(echo $DATABASE_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
-DB_PASSWORD=$(echo $DATABASE_URL | sed -n 's/.*:\/\/[^:]*:\([^@]*\).*/\1/p')
-
-# If any of these are empty, display an error
-if [ -z "$DB_HOST" ] || [ -z "$DB_PORT" ] || [ -z "$DB_NAME" ] || [ -z "$DB_USER" ]; then
-  log "ERROR: Unable to parse DATABASE_URL correctly."
-  log "Make sure DATABASE_URL is in the format: postgres://username:password@host:port/database"
-  exit 1
-fi
-
-# Create backup
-log "Creating backup of $DB_NAME at $DB_HOST..."
-PGPASSWORD=$DB_PASSWORD pg_dump -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -F p -f "$BACKUP_FILE"
 
 # Check if backup was successful
-if [ $? -eq 0 ]; then
-  # Get file size
-  BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
-  log "Backup completed successfully: $BACKUP_FILE ($BACKUP_SIZE)"
+if [ $RESULT -eq 0 ]; then
+    # Get file size
+    FILESIZE=$(du -h "$BACKUP_FILE" | cut -f1)
+    
+    echo -e "${GREEN}Backup successfully created!${NC}"
+    echo "Location: $BACKUP_FILE"
+    echo "Size: $FILESIZE"
+    echo -e "${YELLOW}Use ./scripts/db-restore.sh $BACKUP_FILE to restore this backup${NC}"
+    
+    # Create a symlink to the latest backup
+    ln -sf "$BACKUP_FILE" "$BACKUP_DIR/latest_backup.sql"
+    echo "Symlink to latest backup created: $BACKUP_DIR/latest_backup.sql"
+    
+    # List all backups
+    echo -e "\nAvailable backups:"
+    ls -lh $BACKUP_DIR/*.sql | awk '{print $9, "(" $5 ")"}'
+    
+    # Purge old backups (keep last 10)
+    BACKUP_COUNT=$(ls -1 $BACKUP_DIR/ragdrive_db_backup_*.sql | wc -l)
+    if [ $BACKUP_COUNT -gt 10 ]; then
+        echo -e "\n${YELLOW}Purging old backups (keeping the 10 most recent)...${NC}"
+        ls -1t $BACKUP_DIR/ragdrive_db_backup_*.sql | tail -n +11 | xargs rm -f
+        echo "Old backups purged"
+    fi
+    
+    exit 0
 else
-  log "ERROR: Backup failed!"
-  exit 1
+    echo -e "${RED}Error: Backup failed!${NC}"
+    exit 1
 fi
-
-# Compress the backup
-log "Compressing backup..."
-gzip -f "$BACKUP_FILE"
-COMPRESSED_FILE="${BACKUP_FILE}.gz"
-
-if [ -f "$COMPRESSED_FILE" ]; then
-  COMPRESSED_SIZE=$(du -h "$COMPRESSED_FILE" | cut -f1)
-  log "Backup compressed: $COMPRESSED_FILE ($COMPRESSED_SIZE)"
-else
-  log "WARNING: Compression failed, but uncompressed backup is available."
-fi
-
-# List previous backups
-log "Available backups:"
-ls -lh "$BACKUP_DIR" | grep -v "total" | tee -a "$LOG_FILE"
-
-# Clean old backups (keep last 5)
-BACKUP_COUNT=$(ls -1 "$BACKUP_DIR" | wc -l)
-if [ $BACKUP_COUNT -gt 5 ]; then
-  log "Cleaning old backups (keeping last 5)..."
-  ls -t "$BACKUP_DIR" | tail -n +6 | xargs -I {} rm "$BACKUP_DIR/{}"
-  log "Old backups removed."
-fi
-
-log "Backup process completed successfully!"

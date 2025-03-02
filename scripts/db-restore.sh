@@ -3,115 +3,138 @@
 # RAG Drive FTP Hub Database Restore Script
 # This script restores a PostgreSQL database from a backup
 
-# Exit on error
-set -e
-
-# Configuration
-BACKUP_DIR="./backups"
-LOG_FILE="./logs/db-restore.log"
-
-# Create logs directory if it doesn't exist
-mkdir -p ./logs
-
-# Log function
-log() {
-  local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
-  echo "[$timestamp] $1" | tee -a "$LOG_FILE"
-}
-
-log "Starting database restore process..."
-
-# Check if backup file is specified
-if [ -z "$1" ]; then
-  log "ERROR: No backup file specified."
-  log "Usage: $0 <backup_file>"
-  log "Available backups:"
-  ls -lh "$BACKUP_DIR" | grep -v "total" | tee -a "$LOG_FILE"
-  exit 1
+# Source environment variables if .env file exists
+if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | xargs)
 fi
 
-BACKUP_FILE="$1"
+# Default values if not set in .env
+DB_USER=${POSTGRES_USER:-postgres}
+DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+DB_NAME=${POSTGRES_DB:-ragdrivedb}
+DB_HOST=${POSTGRES_HOST:-localhost}
+DB_PORT=${POSTGRES_PORT:-5432}
 
-# Check if backup file exists
-if [ ! -f "$BACKUP_FILE" ]; then
-  log "ERROR: Backup file not found: $BACKUP_FILE"
-  exit 1
-fi
+# Colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-# Check if DATABASE_URL is set
-if [ -z "$DATABASE_URL" ]; then
-  # Try to load from .env file
-  if [ -f ".env" ]; then
-    source .env
-  fi
-  
-  if [ -z "$DATABASE_URL" ]; then
-    log "ERROR: DATABASE_URL environment variable is not set."
-    exit 1
-  fi
-fi
-
-# Extract database connection details from DATABASE_URL
-DB_HOST=$(echo $DATABASE_URL | sed -n 's/.*@\([^:]*\).*/\1/p')
-DB_PORT=$(echo $DATABASE_URL | sed -n 's/.*:\([0-9]*\)\/.*/\1/p')
-DB_NAME=$(echo $DATABASE_URL | sed -n 's/.*\/\([^?]*\).*/\1/p')
-DB_USER=$(echo $DATABASE_URL | sed -n 's/.*:\/\/\([^:]*\):.*/\1/p')
-DB_PASSWORD=$(echo $DATABASE_URL | sed -n 's/.*:\/\/[^:]*:\([^@]*\).*/\1/p')
-
-# If any of these are empty, display an error
-if [ -z "$DB_HOST" ] || [ -z "$DB_PORT" ] || [ -z "$DB_NAME" ] || [ -z "$DB_USER" ]; then
-  log "ERROR: Unable to parse DATABASE_URL correctly."
-  log "Make sure DATABASE_URL is in the format: postgres://username:password@host:port/database"
-  exit 1
-fi
-
-# Ask for confirmation
-echo -n "WARNING: This will OVERWRITE the current database ($DB_NAME). Are you sure? [y/N] "
-read CONFIRM
-
-if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
-  log "Restore canceled by user."
-  exit 0
-fi
-
-# Check if the backup file is compressed
-if [[ "$BACKUP_FILE" == *.gz ]]; then
-  log "Detected compressed backup, decompressing..."
-  TEMP_FILE="/tmp/ragdrive_db_restore_$(date +%Y%m%d%H%M%S).sql"
-  gunzip -c "$BACKUP_FILE" > "$TEMP_FILE"
-  BACKUP_FILE="$TEMP_FILE"
-  log "Decompressed to temporary file: $TEMP_FILE"
-fi
-
-# Create backup of current database before restore
-TIMESTAMP=$(date +%Y%m%d%H%M%S)
-PRE_RESTORE_BACKUP="$BACKUP_DIR/pre_restore_backup_$TIMESTAMP.sql.gz"
-log "Creating backup of current database before restore..."
-PGPASSWORD=$DB_PASSWORD pg_dump -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -F p | gzip > "$PRE_RESTORE_BACKUP"
-
-if [ $? -eq 0 ]; then
-  log "Pre-restore backup created: $PRE_RESTORE_BACKUP"
+# Check if a backup file is specified
+if [ $# -eq 0 ]; then
+    # If no argument is provided, use the latest backup if available
+    if [ -f "./backups/latest_backup.sql" ]; then
+        BACKUP_FILE="./backups/latest_backup.sql"
+        echo -e "${YELLOW}No backup file specified. Using the latest backup:${NC} $BACKUP_FILE"
+    else
+        echo -e "${RED}Error: No backup file specified and no latest backup found.${NC}"
+        echo "Usage: $0 <backup_file>"
+        echo "Available backups:"
+        
+        # Create backup directory if it doesn't exist
+        BACKUP_DIR="./backups"
+        mkdir -p $BACKUP_DIR
+        
+        # List available backups if any
+        if [ "$(ls -A $BACKUP_DIR 2>/dev/null)" ]; then
+            ls -lh $BACKUP_DIR/*.sql 2>/dev/null | awk '{print $9, "(" $5 ")"}'
+        else
+            echo "No backups found in $BACKUP_DIR"
+        fi
+        
+        exit 1
+    fi
 else
-  log "WARNING: Failed to create pre-restore backup, but continuing with restore."
+    BACKUP_FILE=$1
+    
+    # Check if the backup file exists
+    if [ ! -f "$BACKUP_FILE" ]; then
+        echo -e "${RED}Error: Backup file not found: $BACKUP_FILE${NC}"
+        exit 1
+    fi
 fi
 
-# Restore database
-log "Restoring database from backup: $BACKUP_FILE"
-PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -f "$BACKUP_FILE"
+# Confirmation prompt
+echo -e "${YELLOW}WARNING: This will overwrite the existing database!${NC}"
+echo "Database: $DB_NAME"
+echo "Host: $DB_HOST:$DB_PORT"
+echo "Backup file: $BACKUP_FILE"
+echo
+read -p "Are you sure you want to restore this database? (y/n): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "${YELLOW}Database restore canceled.${NC}"
+    exit 0
+fi
 
-# Check if restore was successful
-if [ $? -eq 0 ]; then
-  log "Database restored successfully!"
+# Create a new backup before restoring (safety measure)
+echo -e "${YELLOW}Creating a backup of the current database state...${NC}"
+SAFETY_BACKUP_DIR="./backups/pre_restore"
+mkdir -p $SAFETY_BACKUP_DIR
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+SAFETY_BACKUP="$SAFETY_BACKUP_DIR/pre_restore_$TIMESTAMP.sql"
+
+# Check if we're running in Docker environment
+if [ -n "$(command -v docker)" ] && [ -n "$(docker ps -q -f name=rag-drive-db)" ]; then
+    echo -e "${YELLOW}Using Docker container for operations...${NC}"
+    
+    # Create safety backup
+    docker exec rag-drive-db pg_dump -U $DB_USER -F c $DB_NAME > "$SAFETY_BACKUP"
+    SAFETY_RESULT=$?
+    
+    if [ $SAFETY_RESULT -eq 0 ]; then
+        echo -e "${GREEN}Safety backup created: $SAFETY_BACKUP${NC}"
+    else
+        echo -e "${RED}Warning: Safety backup failed. Proceeding with restore anyway...${NC}"
+    fi
+    
+    echo -e "${YELLOW}Restoring database from backup...${NC}"
+    
+    # Drop and recreate the database
+    docker exec rag-drive-db psql -U $DB_USER -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();"
+    docker exec rag-drive-db psql -U $DB_USER -c "DROP DATABASE IF EXISTS $DB_NAME;"
+    docker exec rag-drive-db psql -U $DB_USER -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
+    
+    # Restore from backup
+    cat "$BACKUP_FILE" | docker exec -i rag-drive-db pg_restore -U $DB_USER -d $DB_NAME
+    RESTORE_RESULT=$?
 else
-  log "ERROR: Database restore failed!"
-  log "You may want to restore from the pre-restore backup: $PRE_RESTORE_BACKUP"
-  exit 1
+    # Check if pg_restore is installed
+    if ! command -v pg_restore &> /dev/null; then
+        echo -e "${RED}Error: pg_restore command not found. Please install PostgreSQL client tools.${NC}"
+        exit 1
+    fi
+    
+    # Create safety backup
+    PGPASSWORD=$DB_PASSWORD pg_dump -h $DB_HOST -p $DB_PORT -U $DB_USER -F c $DB_NAME > "$SAFETY_BACKUP"
+    SAFETY_RESULT=$?
+    
+    if [ $SAFETY_RESULT -eq 0 ]; then
+        echo -e "${GREEN}Safety backup created: $SAFETY_BACKUP${NC}"
+    else
+        echo -e "${RED}Warning: Safety backup failed. Proceeding with restore anyway...${NC}"
+    fi
+    
+    echo -e "${YELLOW}Restoring database from backup...${NC}"
+    
+    # Drop and recreate the database
+    PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();"
+    PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -c "DROP DATABASE IF EXISTS $DB_NAME;"
+    PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
+    
+    # Restore from backup
+    PGPASSWORD=$DB_PASSWORD pg_restore -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME < "$BACKUP_FILE"
+    RESTORE_RESULT=$?
 fi
 
-# Clean up temporary file if it was created
-if [[ "$TEMP_FILE" == "/tmp/ragdrive_db_restore_"* ]]; then
-  log "Cleaning up temporary file..."
-  rm "$TEMP_FILE"
+# Check restore result
+if [ $RESTORE_RESULT -eq 0 ]; then
+    echo -e "${GREEN}Database restored successfully!${NC}"
+    exit 0
+else
+    echo -e "${RED}Warning: Restore completed with warnings or errors (exit code: $RESTORE_RESULT).${NC}"
+    echo -e "${YELLOW}This may not be a problem if there were only warnings.${NC}"
+    echo "If needed, you can restore the pre-restore backup: $SAFETY_BACKUP"
+    exit $RESTORE_RESULT
 fi
-
-log "Restore process completed successfully."

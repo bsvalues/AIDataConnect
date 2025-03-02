@@ -1,171 +1,209 @@
 #!/bin/bash
 
-# RAG Drive FTP Hub Server Restart Script
-# This script gracefully restarts the application server
+# RAG Drive FTP Hub Restart Script
+# This script restarts the application
 
-# Exit on error
-set -e
+set -e  # Exit immediately if a command exits with a non-zero status
 
-# Configuration
-LOG_FILE="./logs/server-restart.log"
-PID_FILE="./server.pid"
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
 
-# Create logs directory if it doesn't exist
-mkdir -p ./logs
-
-# Log function
-log() {
-  local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
-  echo "[$timestamp] $1" | tee -a "$LOG_FILE"
+# Function to print section header
+print_header() {
+    echo -e "\n${BLUE}=====================================================================${NC}"
+    echo -e "${BLUE}  $1${NC}"
+    echo -e "${BLUE}=====================================================================${NC}\n"
 }
 
-# Check if running in a Docker container
-IN_CONTAINER=false
-if [ -f "/.dockerenv" ]; then
-  IN_CONTAINER=true
-  log "Detected Docker container environment"
-fi
-
-# Function to check if a port is in use
-is_port_in_use() {
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -i:$1 >/dev/null 2>&1
-    return $?
-  elif command -v nc >/dev/null 2>&1; then
-    nc -z localhost $1 >/dev/null 2>&1
-    return $?
-  else
-    (echo > /dev/tcp/localhost/$1) >/dev/null 2>&1
-    return $?
-  fi
-}
-
-log "Starting server restart process..."
-
-# Check if the app is running in container mode
-if $IN_CONTAINER; then
-  log "Container mode: Using Docker commands for restart"
-  
-  # Get the container name/ID
-  CONTAINER_ID=$(hostname)
-  log "Container ID: $CONTAINER_ID"
-  
-  # For Docker deployments, we'll send a SIGTERM to the Node process
-  log "Sending SIGTERM signal to Node process..."
-  if pkill -TERM -f "node"; then
-    log "Signal sent successfully"
-  else
-    log "No Node process found to terminate"
-  fi
-  
-  # Wait for the process to terminate
-  log "Waiting for server to shut down..."
-  sleep 3
-  
-  # Check if the app is still running on port 5000
-  if is_port_in_use 5000; then
-    log "WARNING: Server is still running on port 5000, forcing kill..."
-    pkill -KILL -f "node" || true
-  fi
-  
-  # Start the server again
-  log "Starting server again..."
-  if [ -f "package.json" ]; then
-    nohup npm run dev > ./logs/server.log 2>&1 &
-    log "Server restarted with npm run dev"
-  else
-    log "ERROR: package.json not found, cannot restart server"
-    exit 1
-  fi
-  
-else
-  # Standard process-based approach
-  log "Standard mode: Using process signals for restart"
-  
-  # Check if we have a PID file
-  if [ -f "$PID_FILE" ]; then
-    PID=$(cat "$PID_FILE")
-    log "Found PID file with process ID: $PID"
-    
-    # Check if the process is still running
-    if ps -p $PID > /dev/null; then
-      log "Stopping server with PID $PID..."
-      kill $PID
-      
-      # Wait for the process to terminate
-      log "Waiting for server to shut down..."
-      for i in {1..10}; do
-        if ! ps -p $PID > /dev/null; then
-          break
-        fi
-        sleep 1
-      done
-      
-      # If still running, force kill
-      if ps -p $PID > /dev/null; then
-        log "Server did not shut down gracefully, force killing..."
-        kill -9 $PID
-      fi
+# Function to print status
+print_status() {
+    if [ $1 -eq 0 ]; then
+        echo -e "${GREEN}✓ $2${NC}"
     else
-      log "Process with PID $PID is not running"
+        echo -e "${RED}✗ $2${NC}"
+        if [ -n "$3" ]; then
+            echo -e "${RED}  Error: $3${NC}"
+        fi
     fi
-  else
-    log "No PID file found, checking for server on default port 5000..."
+}
+
+# Restart with Docker Compose
+restart_docker() {
+    print_header "Restarting with Docker Compose"
     
-    # Check if something is running on port 5000
-    if is_port_in_use 5000; then
-      log "Found server running on port 5000, attempting to stop it..."
-      
-      # Try to find the process ID
-      if command -v lsof >/dev/null 2>&1; then
-        SERVER_PID=$(lsof -t -i:5000)
-        if [ -n "$SERVER_PID" ]; then
-          log "Stopping server with PID $SERVER_PID..."
-          kill $SERVER_PID
-          
-          # Wait for the process to terminate
-          for i in {1..5}; do
-            if ! is_port_in_use 5000; then
-              break
-            fi
+    # Check if Docker is installed
+    if ! command -v docker &> /dev/null; then
+        print_status 1 "Docker is not installed or not in PATH"
+        exit 1
+    fi
+    
+    # Check if Docker Compose is installed
+    if ! command -v docker-compose &> /dev/null; then
+        print_status 1 "Docker Compose is not installed or not in PATH"
+        exit 1
+    fi
+    
+    # Check if docker-compose.yml exists
+    if [ ! -f "docker-compose.yml" ]; then
+        print_status 1 "docker-compose.yml not found"
+        exit 1
+    fi
+    
+    # Create database backup if the application is already running
+    if docker-compose ps | grep -q "rag-drive-db"; then
+        echo -e "${YELLOW}Existing database detected. Creating backup...${NC}"
+        ./scripts/db-backup.sh || true
+    fi
+    
+    # Restart containers
+    echo "Restarting containers..."
+    docker-compose down
+    docker-compose up -d
+    
+    print_status $? "Containers restarted"
+    
+    # Verify restart
+    echo "Verifying restart..."
+    sleep 5
+    
+    if docker-compose ps | grep -q "Up"; then
+        print_status 0 "Containers are running"
+    else
+        print_status 1 "Containers failed to start"
+        echo "Logs:"
+        docker-compose logs
+        exit 1
+    fi
+}
+
+# Restart with PM2
+restart_pm2() {
+    print_header "Restarting with PM2"
+    
+    # Check if PM2 is installed
+    if ! command -v pm2 &> /dev/null; then
+        print_status 1 "PM2 is not installed or not in PATH"
+        echo -e "${YELLOW}Run 'npm install -g pm2' to install PM2${NC}"
+        exit 1
+    fi
+    
+    # Check if process.json exists
+    if [ -f "process.json" ]; then
+        echo "Restarting using process.json configuration..."
+        pm2 reload process.json
+        print_status $? "Application restarted with PM2"
+    else
+        echo "No process.json found. Restarting using direct command..."
+        
+        # Check if the app is running
+        if pm2 list | grep -q "rag-drive"; then
+            pm2 reload rag-drive
+            print_status $? "Application restarted with PM2"
+        else
+            echo "Starting application with PM2..."
+            pm2 start server/index.js --name rag-drive
+            print_status $? "Application started with PM2"
+        fi
+    fi
+    
+    # Display status
+    echo
+    echo "Current PM2 processes:"
+    pm2 list
+}
+
+# Restart with Node.js
+restart_node() {
+    print_header "Restarting with Node.js"
+    
+    # Check if Node.js is installed
+    if ! command -v node &> /dev/null; then
+        print_status 1 "Node.js is not installed or not in PATH"
+        exit 1
+    fi
+    
+    # Find and kill existing Node.js process
+    echo "Looking for existing Node.js process..."
+    pid=$(ps aux | grep '[n]ode.*server/index' | awk '{print $2}')
+    
+    if [ -n "$pid" ]; then
+        echo "Killing process $pid..."
+        kill $pid
+        sleep 2
+        
+        # Check if process is still running
+        if ps -p $pid > /dev/null; then
+            echo "Process still running. Sending SIGKILL..."
+            kill -9 $pid
             sleep 1
-          done
-          
-          # If still running, force kill
-          if is_port_in_use 5000; then
-            log "Server did not shut down gracefully, force killing..."
-            kill -9 $SERVER_PID
-          fi
         fi
-      else
-        log "lsof command not available, cannot find process ID"
-      fi
+        
+        print_status 0 "Previous process terminated"
     else
-      log "No server running on port 5000"
+        echo "No existing process found."
     fi
-  fi
-  
-  # Start the server again
-  log "Starting server again..."
-  if [ -f "package.json" ]; then
-    nohup npm run dev > ./logs/server.log 2>&1 &
-    NEW_PID=$!
-    echo $NEW_PID > "$PID_FILE"
-    log "Server restarted with PID $NEW_PID"
-  else
-    log "ERROR: package.json not found, cannot restart server"
-    exit 1
-  fi
-fi
+    
+    # Start new process
+    echo "Starting new Node.js process..."
+    NODE_ENV=production nohup node server/index.js > logs/app.log 2>&1 &
+    new_pid=$!
+    
+    echo "Started new process with PID: $new_pid"
+    
+    # Check if process is running
+    sleep 2
+    if ps -p $new_pid > /dev/null; then
+        print_status 0 "Application restarted successfully"
+    else
+        print_status 1 "Failed to start application"
+        echo "Check logs/app.log for details"
+        exit 1
+    fi
+}
 
-# Final check to make sure server is running
-sleep 5
-if is_port_in_use 5000; then
-  log "Server successfully restarted and listening on port 5000"
-else
-  log "ERROR: Server failed to start properly"
-  tail -n 20 ./logs/server.log | tee -a "$LOG_FILE"
-  exit 1
-fi
+# Main function
+main() {
+    print_header "RAG Drive FTP Hub Application Restart"
+    echo "This script will restart the RAG Drive FTP Hub application."
+    echo
+    
+    # Ensure logs directory exists
+    mkdir -p logs
+    
+    # Choose restart method
+    echo "Restart methods:"
+    echo "1) Docker Compose (recommended for production)"
+    echo "2) PM2 Process Manager"
+    echo "3) Direct Node.js"
+    echo
+    read -p "Select restart method (1/2/3): " restart_method
+    
+    case $restart_method in
+        1)
+            restart_docker
+            ;;
+        2)
+            restart_pm2
+            ;;
+        3)
+            restart_node
+            ;;
+        *)
+            echo -e "${RED}Invalid selection. Restart canceled.${NC}"
+            exit 1
+            ;;
+    esac
+    
+    print_header "Restart Complete"
+    echo -e "${GREEN}RAG Drive FTP Hub has been restarted successfully!${NC}"
+    
+    # Display current date and time
+    echo "Restart completed at: $(date)"
+}
 
-log "Restart process completed successfully"
+# Run the main function
+main
