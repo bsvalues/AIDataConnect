@@ -109,12 +109,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Protected route component - TEMPORARY: Authentication bypass for development
+// Protected route component
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  // Temporarily bypass authentication checks
-  return <Component />;
-  
-  /* Original authentication logic (commented out for now)
   const { isAuthenticated, isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -133,7 +129,6 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   return <Component />;
-  */
 }
 
 // Public route component
