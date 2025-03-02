@@ -104,7 +104,7 @@ describe('DataSources Page', () => {
 
   it('displays error message when data sources fetch fails', async () => {
     // Mock failed data sources fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: false,
       status: 500,
       json: () => Promise.resolve({ message: 'Failed to fetch data sources' }),

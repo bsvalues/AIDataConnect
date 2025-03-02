@@ -82,7 +82,7 @@ describe('PipelineBuilder Page', () => {
 
   it('loads existing pipeline when one exists', async () => {
     // Mock successful pipeline fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({
         id: 1,
@@ -109,7 +109,7 @@ describe('PipelineBuilder Page', () => {
 
   it('handles save pipeline operation', async () => {
     // Mock successful pipeline save
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({
         id: 1,
@@ -143,7 +143,7 @@ describe('PipelineBuilder Page', () => {
 
   it('displays error when pipeline save fails', async () => {
     // Mock failed pipeline save
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: false,
       status: 500,
       json: () => Promise.resolve({ message: 'Failed to save pipeline' }),

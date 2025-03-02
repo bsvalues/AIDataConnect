@@ -52,7 +52,7 @@ describe('Dashboard Page', () => {
 
   it('displays recent activity when data is available', async () => {
     // Mock successful activity fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([
         { 
@@ -83,7 +83,7 @@ describe('Dashboard Page', () => {
 
   it('handles empty recent activity', async () => {
     // Mock empty activity response
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([]),
     });
@@ -97,7 +97,7 @@ describe('Dashboard Page', () => {
 
   it('displays error message when activity fetch fails', async () => {
     // Mock failed activity fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: false,
       status: 500,
       json: () => Promise.resolve({ message: 'Failed to fetch activity' }),
@@ -116,7 +116,7 @@ describe('Dashboard Page', () => {
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     
     // Mock activity with different timestamps
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([
         { 
