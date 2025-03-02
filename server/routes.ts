@@ -65,8 +65,34 @@ function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// Ensure a default test user exists for demo purposes
+async function ensureDefaultUser() {
+  try {
+    // Check if any users exist
+    const users = await storage.getUserByUsername('admin');
+    
+    if (!users) {
+      // Create a default admin user
+      const defaultUser = {
+        username: 'admin',
+        password: hashPassword('password'),
+        email: 'admin@example.com',
+        createdAt: new Date(),
+      };
+      
+      await storage.createUser(defaultUser);
+      logger.info('Created default admin user for testing');
+    }
+  } catch (error) {
+    logger.error('Error ensuring default user:', error);
+  }
+}
+
 export async function registerRoutes(app: Express, server: Server): Promise<Server> {
   await ensureUploadsDirectory();
+  
+  // Ensure test user exists
+  await ensureDefaultUser();
   
   // Add a test protected route for authentication testing
   app.get("/api/auth/protected", isAuthenticated, (_req: Request, res: Response) => {

@@ -70,10 +70,34 @@ export default function Login() {
     mutationFn: async (values: z.infer<typeof loginSchema>) => {
       setError(null);
       try {
-        const result = await apiRequest("POST", "/api/auth/login", {
-          data: values
+        // Since we get HTML instead of JSON when the server returns an error page,
+        // we'll use fetch directly with error handling
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(values),
+          credentials: "include"
         });
-        return result;
+        
+        if (!response.ok) {
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const errorData = await response.json();
+            throw new ApiError(
+              response.status,
+              errorData.message || "Authentication failed"
+            );
+          } else {
+            throw new ApiError(
+              response.status,
+              "Server error: The service is currently unavailable"
+            );
+          }
+        }
+        
+        return await response.json();
       } catch (err) {
         if (err instanceof ApiError) {
           setError(err.message);
