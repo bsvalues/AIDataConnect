@@ -1,7 +1,7 @@
 import { useCallback, useState, useMemo, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Upload, Server, Shield, AlertCircle, FileCheck } from "lucide-react";
+import { Upload, Server, Shield, AlertCircle, FileCheck, InfoIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, ApiError } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
@@ -9,6 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -383,6 +389,19 @@ export function FileUpload() {
             <Label htmlFor="enable-rag" className="flex items-center">
               <FileCheck className="w-4 h-4 mr-1" />
               Enable RAG Processing
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <InfoIcon className="h-4 w-4 ml-1.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p>
+                      RAG (Retrieval-Augmented Generation) processing creates embeddings from your document, 
+                      enabling semantic search and AI-powered question answering based on your file content.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </Label>
           </div>
         </div>

@@ -330,7 +330,7 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
             }
           })();
         } catch (ragError) {
-          logger.error(`Error starting RAG processing for file ${savedFile.id}:`, ragError);
+          logger.error(`Error starting RAG processing for file ${savedFile.id}:`, ragError instanceof Error ? ragError : 'Unknown error');
           // We don't reject the upload if RAG fails to start
         }
       }
