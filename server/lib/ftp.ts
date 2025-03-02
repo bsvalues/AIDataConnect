@@ -23,7 +23,7 @@ function createFtpServer(port: number): FtpServer {
 }
 
 // Start FTP server
-export async function startFtpServer() {
+export async function startFtpServer(): Promise<FtpServer> {
   try {
     // Check for required environment variables
     console.log("Checking FTP environment variables...");
@@ -60,13 +60,13 @@ export async function startFtpServer() {
 
         await ftpServer.listen();
         console.log(`FTP Server is running on port ${port}`);
-        return;
+        return ftpServer;
       } catch (error: any) {
         if (error?.code === 'EADDRINUSE') {
           console.log(`Port ${port} is in use, trying next port...`);
           if (port === tryPorts[tryPorts.length - 1]) {
             console.warn("All FTP ports in use, skipping FTP server startup");
-            return;
+            return ftpServer;
           }
           continue;
         }
@@ -74,6 +74,7 @@ export async function startFtpServer() {
         throw error;
       }
     }
+    return ftpServer;
   } catch (error) {
     console.error("Failed to start FTP server:", error);
     throw error;

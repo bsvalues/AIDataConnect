@@ -1,16 +1,22 @@
-import React, { Suspense, lazy } from "react";
-import { Switch, Route } from "wouter";
+import React, { Suspense, lazy, useState, useEffect } from "react";
+import { Switch, Route, useLocation, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { apiRequest } from "./lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 // Lazy load components for better performance
-const Dashboard = lazy(() => import("@/pages/dashboard"));
+const DashboardPage = lazy(() => import("@/pages/dashboard"));
 const FileExplorer = lazy(() => import("@/pages/file-explorer"));
 const DataSources = lazy(() => import("@/pages/data-sources"));
 const PipelineBuilder = lazy(() => import("@/pages/pipeline-builder"));
+const Login = lazy(() => import("@/pages/login"));
+const Register = lazy(() => import("@/pages/register"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 // Loading component
@@ -24,22 +30,159 @@ function PageLoader() {
   );
 }
 
-function Router() {
+// Auth provider 
+interface AuthContextType {
+  user: any | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  logout: () => void;
+}
+
+const AuthContext = React.createContext<AuthContextType>({
+  user: null,
+  isLoading: true,
+  isAuthenticated: false,
+  logout: () => {},
+});
+
+function useAuth() {
+  return React.useContext(AuthContext);
+}
+
+function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<any | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+
+  // Check if user is logged in
+  const { data, isLoading: queryLoading } = useQuery({
+    queryKey: ['/api/auth/me'],
+    queryFn: async () => {
+      try {
+        const data = await apiRequest('/api/auth/me', 'GET');
+        return data;
+      } catch (error) {
+        return null;
+      }
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  useEffect(() => {
+    if (!queryLoading) {
+      setUser(data);
+      setIsLoading(false);
+    }
+  }, [data, queryLoading]);
+
+  const logout = async () => {
+    try {
+      await apiRequest('/api/auth/logout', 'POST');
+      setUser(null);
+      queryClient.invalidateQueries();
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out",
+      });
+      setLocation('/login');
+    } catch (error) {
+      toast({
+        title: "Logout failed",
+        description: "Failed to log out",
+        variant: "destructive",
+      });
+    }
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isAuthenticated: !!user,
+        logout,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+// Protected route component
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      setLocation('/login');
+    }
+  }, [isLoading, isAuthenticated, setLocation]);
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  return <Component />;
+}
+
+// Public route component
+function PublicRoute({ component: Component }: { component: React.ComponentType }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const [location] = useLocation();
+  
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  // Redirect to dashboard if already logged in and trying to access login or register
+  if (isAuthenticated && (location === '/login' || location === '/register')) {
+    return <Redirect to="/" />;
+  }
+
+  return <Component />;
+}
+
+function AppLayout() {
+  const { logout, user } = useAuth();
+  
   return (
     <div className="flex min-h-screen">
       <aside className="w-64 border-r bg-background">
-        <div className="p-6">
+        <div className="p-6 border-b">
           <h1 className="text-xl font-bold">RAG Drive</h1>
+          {user && (
+            <div className="mt-2 text-sm text-muted-foreground">
+              Logged in as: {user.username}
+            </div>
+          )}
         </div>
         <SidebarNav />
+        <div className="p-4 mt-auto border-t">
+          <Button 
+            variant="outline" 
+            className="w-full flex items-center justify-center" 
+            onClick={logout}
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Logout
+          </Button>
+        </div>
       </aside>
       <main className="flex-1 p-6">
         <Suspense fallback={<PageLoader />}>
           <Switch>
-            <Route path="/" component={Dashboard} />
-            <Route path="/files" component={FileExplorer} />
-            <Route path="/data-sources" component={DataSources} />
-            <Route path="/pipeline" component={PipelineBuilder} />
+            <Route path="/" component={() => <ProtectedRoute component={DashboardPage} />} />
+            <Route path="/files" component={() => <ProtectedRoute component={FileExplorer} />} />
+            <Route path="/data-sources" component={() => <ProtectedRoute component={DataSources} />} />
+            <Route path="/pipeline" component={() => <ProtectedRoute component={PipelineBuilder} />} />
+            <Route path="/login" component={() => <PublicRoute component={Login} />} />
+            <Route path="/register" component={() => <PublicRoute component={Register} />} />
             <Route component={NotFound} />
           </Switch>
         </Suspense>
@@ -90,8 +233,16 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <Router />
-        <Toaster />
+        <AuthProvider>
+          <Switch>
+            <Route path="/login" component={Login} />
+            <Route path="/register" component={Register} />
+            <Route>
+              <AppLayout />
+            </Route>
+          </Switch>
+          <Toaster />
+        </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );
