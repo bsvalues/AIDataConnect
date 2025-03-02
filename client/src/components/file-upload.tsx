@@ -99,12 +99,7 @@ export function FileUpload() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const uploadData = {
-        transferType: useFtp ? "ftp" : "local",
-        ftpConfig: useFtp ? ftpConfig : null
-      };
-
-      formData.append("transferType", uploadData.transferType);
+      formData.append("transferType", useFtp ? "ftp" : "local");
       if (useFtp) {
         formData.append("ftpConfig", JSON.stringify({
           ...ftpConfig,
@@ -113,6 +108,11 @@ export function FileUpload() {
       }
 
       try {
+        // Create a custom fetch with progress tracking
+        const controller = new AbortController();
+        const signal = controller.signal;
+        
+        // We need to manually implement progress tracking since fetch doesn't support it directly
         const xhr = new XMLHttpRequest();
         const promise = new Promise((resolve, reject) => {
           xhr.upload.onprogress = (event) => {
@@ -124,7 +124,11 @@ export function FileUpload() {
 
           xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-              resolve(JSON.parse(xhr.response));
+              try {
+                resolve(JSON.parse(xhr.response));
+              } catch (error) {
+                resolve(xhr.response);
+              }
             } else {
               reject(new Error(xhr.response || 'Upload failed'));
             }
@@ -135,6 +139,7 @@ export function FileUpload() {
           };
 
           xhr.open('POST', '/api/files');
+          xhr.withCredentials = true; // Include credentials (cookies) for authentication
           xhr.send(formData);
         });
 
