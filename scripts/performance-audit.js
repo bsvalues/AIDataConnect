@@ -8,726 +8,649 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { createSpinner } = require('nanospinner');
 
 // Configuration
-const DEFAULT_CONFIG = {
-  targetDirs: ['client/src', 'server'],
-  excludeDirs: ['node_modules', 'dist', 'build', 'coverage'],
-  reportFile: './performance-audit-report.md',
-  rules: {
-    'largeComponentCheck': { enabled: true, threshold: 300 },
-    'recursiveRenderCheck': { enabled: true },
-    'memoCheck': { enabled: true },
-    'asyncComponentCheck': { enabled: true },
-    'dbQueryCheck': { enabled: true },
-    'unnecessaryRenderCheck': { enabled: true },
-    'bundleSizeCheck': { enabled: true },
-    'unusedDependencyCheck': { enabled: true },
-    'redundantQueryCheck': { enabled: true },
-    'networkWaterfallCheck': { enabled: true }
-  }
+const LOG_FILE = './logs/performance-audit.log';
+const REPORT_FILE = './performance-audit-report.md';
+const DIRECTORIES_TO_ANALYZE = [
+  './client/src',
+  './server',
+  './shared'
+];
+
+// Create logs directory if it doesn't exist
+if (!fs.existsSync('./logs')) {
+  fs.mkdirSync('./logs');
+}
+
+// Logger setup
+const log = (message) => {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] ${message}`;
+  console.log(logMessage);
+  fs.appendFileSync(LOG_FILE, logMessage + '\n');
 };
 
-// Check if config file exists, otherwise use default
-let config = DEFAULT_CONFIG;
-if (fs.existsSync('./performance-audit.config.js')) {
-  try {
-    config = { ...DEFAULT_CONFIG, ...require('./performance-audit.config.js') };
-    console.log('Using custom configuration from performance-audit.config.js');
-  } catch (error) {
-    console.error('Error loading custom configuration:', error.message);
-    console.log('Falling back to default configuration');
+log('Starting performance audit...');
+
+// Function to analyze file sizes
+function analyzeFileSizes() {
+  log('Analyzing file sizes...');
+  
+  const fileSizes = [];
+  
+  for (const dir of DIRECTORIES_TO_ANALYZE) {
+    traverseDirectory(dir, (filePath) => {
+      const stats = fs.statSync(filePath);
+      fileSizes.push({
+        path: filePath,
+        size: stats.size,
+        lastModified: stats.mtime
+      });
+    });
+  }
+  
+  // Sort by size (largest first)
+  fileSizes.sort((a, b) => b.size - a.size);
+  
+  log(`Analyzed ${fileSizes.length} files`);
+  return fileSizes;
+}
+
+// Function to traverse a directory
+function traverseDirectory(dir, callback) {
+  if (!fs.existsSync(dir)) {
+    return;
+  }
+  
+  const files = fs.readdirSync(dir);
+  
+  for (const file of files) {
+    const filePath = path.join(dir, file);
+    const stats = fs.statSync(filePath);
+    
+    if (stats.isDirectory()) {
+      traverseDirectory(filePath, callback);
+    } else if (stats.isFile()) {
+      callback(filePath);
+    }
   }
 }
 
-// Create report header
-const getReportHeader = () => `# RAG Drive FTP Hub Performance Audit Report
-
-Generated on: ${new Date().toLocaleString()}
-
-## Summary
-
-This report provides an analysis of potential performance optimizations for the RAG Drive FTP Hub application.
-
-## Table of Contents
-
-1. [Component Size Analysis](#component-size-analysis)
-2. [Recursive Rendering Issues](#recursive-rendering-issues)
-3. [Missing Memoization](#missing-memoization)
-4. [Inefficient Async Patterns](#inefficient-async-patterns)
-5. [Database Query Optimizations](#database-query-optimizations)
-6. [Unnecessary Re-renders](#unnecessary-re-renders)
-7. [Bundle Size Analysis](#bundle-size-analysis)
-8. [Unused Dependencies](#unused-dependencies)
-9. [Redundant API Queries](#redundant-api-queries)
-10. [Network Request Waterfall](#network-request-waterfall)
-11. [Recommendations](#recommendations)
-
-`;
-
-// Find all JS/TS files
-const findFiles = (dir, extensions = ['.js', '.jsx', '.ts', '.tsx']) => {
-  const spinner = createSpinner('Scanning files...').start();
-  const results = [];
+// Function to analyze JavaScript/TypeScript complexity
+function analyzeCodeComplexity() {
+  log('Analyzing code complexity...');
   
-  try {
-    const walkDir = (currentPath) => {
-      if (config.excludeDirs.some(exclude => currentPath.includes(exclude))) {
-        return;
-      }
-      
-      const files = fs.readdirSync(currentPath);
-      
-      for (const file of files) {
-        const filePath = path.join(currentPath, file);
-        const stat = fs.statSync(filePath);
+  const complexFiles = [];
+  
+  for (const dir of DIRECTORIES_TO_ANALYZE) {
+    traverseDirectory(dir, (filePath) => {
+      if (filePath.endsWith('.js') || filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const lines = content.split('\n');
         
-        if (stat.isFile() && extensions.includes(path.extname(file))) {
-          results.push(filePath);
-        } else if (stat.isDirectory()) {
-          walkDir(filePath);
+        // Simple complexity metrics
+        const lineCount = lines.length;
+        const functionCount = (content.match(/function\s+\w+\s*\(/g) || []).length +
+                             (content.match(/\w+\s*=\s*function\s*\(/g) || []).length +
+                             (content.match(/\w+\s*=\s*\([^)]*\)\s*=>/g) || []).length +
+                             (content.match(/\([^)]*\)\s*=>/g) || []).length;
+        
+        // Check for deep nesting
+        let maxNestingLevel = 0;
+        let currentNestingLevel = 0;
+        for (const line of lines) {
+          // Increment nesting level for opening brackets
+          currentNestingLevel += (line.match(/{/g) || []).length;
+          // Decrement nesting level for closing brackets
+          currentNestingLevel -= (line.match(/}/g) || []).length;
+          // Update max nesting level
+          maxNestingLevel = Math.max(maxNestingLevel, currentNestingLevel);
+        }
+        
+        // Check for long functions
+        const longFunctions = [];
+        let inFunction = false;
+        let functionStartLine = 0;
+        let functionName = '';
+        let bracketCount = 0;
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          
+          // Function declaration patterns
+          const functionDeclaration = line.match(/function\s+(\w+)\s*\(/);
+          const arrowFunctionDeclaration = line.match(/(\w+)\s*=\s*\([^)]*\)\s*=>/);
+          const methodDeclaration = line.match(/(\w+)\s*\([^)]*\)\s*{/);
+          
+          if (!inFunction && (functionDeclaration || arrowFunctionDeclaration || methodDeclaration)) {
+            inFunction = true;
+            functionStartLine = i + 1;
+            functionName = functionDeclaration ? functionDeclaration[1] :
+                          arrowFunctionDeclaration ? arrowFunctionDeclaration[1] :
+                          methodDeclaration ? methodDeclaration[1] : 'anonymous';
+            bracketCount += (line.match(/{/g) || []).length;
+            bracketCount -= (line.match(/}/g) || []).length;
+          } else if (inFunction) {
+            bracketCount += (line.match(/{/g) || []).length;
+            bracketCount -= (line.match(/}/g) || []).length;
+            
+            if (bracketCount === 0) {
+              const functionLength = i - functionStartLine + 1;
+              if (functionLength > 50) { // Functions longer than 50 lines
+                longFunctions.push({
+                  name: functionName,
+                  length: functionLength,
+                  startLine: functionStartLine
+                });
+              }
+              inFunction = false;
+            }
+          }
+        }
+        
+        complexFiles.push({
+          path: filePath,
+          lines: lineCount,
+          functions: functionCount,
+          maxNestingLevel,
+          longFunctions
+        });
+      }
+    });
+  }
+  
+  // Sort by complexity (most complex first based on nesting level and line count)
+  complexFiles.sort((a, b) => {
+    if (b.maxNestingLevel !== a.maxNestingLevel) {
+      return b.maxNestingLevel - a.maxNestingLevel;
+    }
+    return b.lines - a.lines;
+  });
+  
+  log(`Analyzed complexity of ${complexFiles.length} files`);
+  return complexFiles;
+}
+
+// Function to analyze React components for performance issues
+function analyzeReactPerformance() {
+  log('Analyzing React performance...');
+  
+  const reactIssues = [];
+  
+  for (const dir of DIRECTORIES_TO_ANALYZE) {
+    traverseDirectory(dir, (filePath) => {
+      if (filePath.endsWith('.jsx') || filePath.endsWith('.tsx')) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const lines = content.split('\n');
+        
+        // Check for common React performance issues
+        const issues = {
+          missingMemo: !content.includes('React.memo') && !content.includes('memo(') && content.includes('export default'),
+          missingUseCallback: content.includes('function') && content.includes('useState') && !content.includes('useCallback'),
+          missingUseMemo: content.includes('useState') && !content.includes('useMemo'),
+          inlineObjectCreation: (content.match(/style=\{\{/g) || []).length,
+          missingDependencyArray: (content.match(/useEffect\(\s*\(\)\s*=>\s*\{[^}]*\}\s*\)/g) || []).length,
+          excessiveRenders: content.includes('console.log') && content.includes('render')
+        };
+        
+        // Look for inline handlers in JSX
+        let inlineHandlers = 0;
+        for (const line of lines) {
+          if (line.includes('on') && line.includes('=>')) {
+            inlineHandlers++;
+          }
+        }
+        
+        issues.inlineHandlers = inlineHandlers;
+        
+        // Calculate overall severity
+        const severity = Object.values(issues).reduce((sum, value) => {
+          return sum + (typeof value === 'number' ? value : (value ? 1 : 0));
+        }, 0);
+        
+        if (severity > 0) {
+          reactIssues.push({
+            path: filePath,
+            severity,
+            issues
+          });
         }
       }
-    };
-    
-    for (const targetDir of config.targetDirs) {
-      if (fs.existsSync(targetDir)) {
-        walkDir(targetDir);
-      }
-    }
-    
-    spinner.success({ text: `Found ${results.length} files to analyze` });
-    return results;
-  } catch (error) {
-    spinner.error({ text: `Error scanning files: ${error.message}` });
-    process.exit(1);
+    });
   }
-};
+  
+  // Sort by severity (highest first)
+  reactIssues.sort((a, b) => b.severity - a.severity);
+  
+  log(`Found ${reactIssues.length} files with React performance issues`);
+  return reactIssues;
+}
 
-// Analyze large components
-const analyzeLargeComponents = (files) => {
-  const spinner = createSpinner('Analyzing component sizes...').start();
-  const results = [];
+// Function to analyze API and database queries
+function analyzeBackendPerformance() {
+  log('Analyzing backend performance...');
+  
+  const backendIssues = [];
+  
+  for (const dir of ['./server']) {
+    traverseDirectory(dir, (filePath) => {
+      if (filePath.endsWith('.js') || filePath.endsWith('.ts')) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        
+        // Check for common backend performance issues
+        const issues = {
+          missingIndexes: content.includes('findOne') || content.includes('findMany'),
+          missingPagination: (content.includes('find') || content.includes('query')) && !content.includes('limit') && !content.includes('LIMIT'),
+          missingCaching: content.includes('query') && !content.includes('cache'),
+          n1Problem: content.includes('for') && content.includes('await') && content.includes('findOne'),
+          inefficientQueries: content.includes('SELECT * FROM') || content.includes('find({})'),
+          synchronousOperations: content.includes('readFileSync') || content.includes('execSync'),
+          missingErrorHandling: content.includes('try') && !content.includes('catch'),
+          missingTransactions: content.includes('UPDATE') && content.includes('INSERT') && !content.includes('transaction')
+        };
+        
+        // Calculate overall severity
+        const severity = Object.values(issues).filter(Boolean).length;
+        
+        if (severity > 0) {
+          backendIssues.push({
+            path: filePath,
+            severity,
+            issues
+          });
+        }
+      }
+    });
+  }
+  
+  // Sort by severity (highest first)
+  backendIssues.sort((a, b) => b.severity - a.severity);
+  
+  log(`Found ${backendIssues.length} files with backend performance issues`);
+  return backendIssues;
+}
+
+// Function to analyze bundle size (using rough estimation)
+function analyzeBundleSize() {
+  log('Analyzing client bundle size...');
+  
+  // Group files by type to estimate their contribution to the bundle
+  const typeGroups = {
+    components: { size: 0, count: 0 },
+    utilities: { size: 0, count: 0 },
+    styles: { size: 0, count: 0 },
+    assets: { size: 0, count: 0 },
+    tests: { size: 0, count: 0 },
+    other: { size: 0, count: 0 }
+  };
+  
+  traverseDirectory('./client/src', (filePath) => {
+    const stats = fs.statSync(filePath);
+    const size = stats.size;
+    
+    if (filePath.includes('/components/')) {
+      typeGroups.components.size += size;
+      typeGroups.components.count++;
+    } else if (filePath.includes('/utils/') || filePath.includes('/helpers/') || filePath.includes('/lib/')) {
+      typeGroups.utilities.size += size;
+      typeGroups.utilities.count++;
+    } else if (filePath.endsWith('.css') || filePath.endsWith('.scss') || filePath.includes('/styles/')) {
+      typeGroups.styles.size += size;
+      typeGroups.styles.count++;
+    } else if (filePath.endsWith('.svg') || filePath.endsWith('.png') || filePath.endsWith('.jpg') || filePath.includes('/assets/')) {
+      typeGroups.assets.size += size;
+      typeGroups.assets.count++;
+    } else if (filePath.includes('.test.') || filePath.includes('.spec.')) {
+      typeGroups.tests.size += size;
+      typeGroups.tests.count++;
+    } else {
+      typeGroups.other.size += size;
+      typeGroups.other.count++;
+    }
+  });
+  
+  log('Bundle size analysis completed');
+  return typeGroups;
+}
+
+// Function to check for unused dependencies
+function analyzeUnusedDependencies() {
+  log('Analyzing dependencies...');
   
   try {
-    for (const file of files) {
-      const content = fs.readFileSync(file, 'utf8');
-      const lines = content.split('\n').length;
-      
-      if (lines > config.rules.largeComponentCheck.threshold) {
-        results.push({
-          file,
-          lines,
-          recommendation: `Consider breaking down this component into smaller, reusable components.`
-        });
-      }
+    const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+    const dependencies = Object.keys({ ...packageJson.dependencies, ...packageJson.devDependencies });
+    
+    // Count usage of each dependency in the codebase
+    const dependencyUsage = {};
+    for (const dep of dependencies) {
+      dependencyUsage[dep] = 0;
     }
     
-    spinner.success({ text: `Found ${results.length} large components` });
-    return results;
-  } catch (error) {
-    spinner.error({ text: `Error analyzing component sizes: ${error.message}` });
-    return [];
-  }
-};
-
-// Detect potential recursive rendering issues
-const analyzeRecursiveRenderingIssues = (files) => {
-  const spinner = createSpinner('Checking for recursive rendering issues...').start();
-  const results = [];
-  
-  try {
-    for (const file of files) {
-      const content = fs.readFileSync(file, 'utf8');
-      
-      // Look for patterns that might cause recursive rendering
-      if (
-        (content.includes('useState') || content.includes('useReducer')) && 
-        content.includes('useEffect') && 
-        content.includes('setState') &&
-        !content.includes('useCallback')
-      ) {
-        results.push({
-          file,
-          issue: 'Potential recursive rendering',
-          recommendation: 'Verify that state updates in useEffect are not causing infinite loops. Consider adding dependencies array or using useCallback.'
-        });
-      }
-    }
-    
-    spinner.success({ text: `Found ${results.length} potential recursive rendering issues` });
-    return results;
-  } catch (error) {
-    spinner.error({ text: `Error analyzing recursive rendering: ${error.message}` });
-    return [];
-  }
-};
-
-// Identify components that could benefit from memoization
-const analyzeMissingMemoization = (files) => {
-  const spinner = createSpinner('Checking for missing memoization...').start();
-  const results = [];
-  
-  try {
-    for (const file of files) {
-      if (file.includes('.test.') || file.includes('.spec.')) continue;
-      
-      const content = fs.readFileSync(file, 'utf8');
-      
-      // Look for functional components without memo
-      if (
-        content.includes('function') && 
-        content.includes('return (') && 
-        content.includes('props') &&
-        !content.includes('React.memo') && 
-        !content.includes('memo(') && 
-        !content.includes('useCallback') &&
-        !content.includes('useMemo')
-      ) {
-        results.push({
-          file,
-          issue: 'Missing memoization',
-          recommendation: 'Consider using React.memo() for this component to prevent unnecessary re-renders.'
-        });
-      }
-      
-      // Look for computed values that could be memoized
-      if (
-        content.includes('const') && 
-        content.includes('map(') && 
-        content.includes('filter(') && 
-        !content.includes('useMemo')
-      ) {
-        results.push({
-          file,
-          issue: 'Computed values without memoization',
-          recommendation: 'Consider using useMemo() for expensive computations to prevent recalculations on each render.'
-        });
-      }
-    }
-    
-    spinner.success({ text: `Found ${results.length} components that could benefit from memoization` });
-    return results;
-  } catch (error) {
-    spinner.error({ text: `Error analyzing memoization: ${error.message}` });
-    return [];
-  }
-};
-
-// Analyze inefficient async patterns
-const analyzeAsyncPatterns = (files) => {
-  const spinner = createSpinner('Checking for inefficient async patterns...').start();
-  const results = [];
-  
-  try {
-    for (const file of files) {
-      const content = fs.readFileSync(file, 'utf8');
-      
-      // Check for sequential promises that could be parallelized
-      if (
-        content.includes('await') && 
-        content.includes('then(') && 
-        !content.includes('Promise.all')
-      ) {
-        results.push({
-          file,
-          issue: 'Sequential promises',
-          recommendation: 'Consider using Promise.all() to parallelize independent async operations.'
-        });
-      }
-      
-      // Check for async operations in loops
-      if (
-        (content.includes('for (') || content.includes('forEach(') || content.includes('.map(')) && 
-        content.includes('await')
-      ) {
-        results.push({
-          file,
-          issue: 'Async operations in loops',
-          recommendation: 'Consider batching async operations or using Promise.all() with mapped promises.'
-        });
-      }
-    }
-    
-    spinner.success({ text: `Found ${results.length} inefficient async patterns` });
-    return results;
-  } catch (error) {
-    spinner.error({ text: `Error analyzing async patterns: ${error.message}` });
-    return [];
-  }
-};
-
-// Analyze database queries
-const analyzeDatabaseQueries = (files) => {
-  const spinner = createSpinner('Analyzing database queries...').start();
-  const results = [];
-  
-  try {
-    for (const file of files) {
-      const content = fs.readFileSync(file, 'utf8');
-      
-      // Look for potentially inefficient queries
-      if (
-        (content.includes('SELECT *') || content.includes('findAll')) && 
-        (content.includes('JOIN') || content.includes('$infer'))
-      ) {
-        results.push({
-          file,
-          issue: 'Potentially inefficient query',
-          recommendation: 'Consider selecting only necessary columns instead of using SELECT * or findAll().'
-        });
-      }
-      
-      // Look for missing indexes
-      if (
-        (content.includes('WHERE') || content.includes('find(') || content.includes('filter(')) && 
-        !content.includes('INDEX') && 
-        !content.includes('createIndex')
-      ) {
-        results.push({
-          file,
-          issue: 'Potential missing index',
-          recommendation: 'Verify that database columns used in WHERE clauses have proper indexes.'
-        });
-      }
-      
-      // Look for N+1 query problems
-      if (
-        content.includes('forEach') && 
-        (content.includes('find(') || content.includes('SELECT') || content.includes('db.'))
-      ) {
-        results.push({
-          file,
-          issue: 'Potential N+1 query problem',
-          recommendation: 'Consider using eager loading or JOIN operations instead of making separate queries in loops.'
-        });
-      }
-    }
-    
-    spinner.success({ text: `Found ${results.length} database query optimization opportunities` });
-    return results;
-  } catch (error) {
-    spinner.error({ text: `Error analyzing database queries: ${error.message}` });
-    return [];
-  }
-};
-
-// Run the bundle size analysis
-const analyzeBundleSize = () => {
-  const spinner = createSpinner('Analyzing bundle size...').start();
-  
-  try {
-    // Check if source-map-explorer is installed
-    try {
-      execSync('npx source-map-explorer --version', { stdio: 'ignore' });
-    } catch (error) {
-      spinner.warn({ text: 'source-map-explorer not found. Skipping bundle size analysis.' });
-      return {
-        recommendation: 'Install source-map-explorer and build with source maps to analyze bundle size.',
-        details: []
-      };
-    }
-    
-    // Check if we have a build directory with maps
-    const buildDir = path.resolve('./build');
-    if (!fs.existsSync(buildDir)) {
-      spinner.warn({ text: 'Build directory not found. Skipping bundle size analysis.' });
-      return {
-        recommendation: 'Run a production build with source maps enabled to analyze bundle size.',
-        details: []
-      };
-    }
-    
-    // Look for JS files with maps
-    const jsFiles = fs.readdirSync(buildDir)
-      .filter(file => file.endsWith('.js') && fs.existsSync(path.join(buildDir, `${file}.map`)));
-    
-    if (jsFiles.length === 0) {
-      spinner.warn({ text: 'No JavaScript files with source maps found. Skipping bundle size analysis.' });
-      return {
-        recommendation: 'Ensure your build process generates source maps for bundle analysis.',
-        details: []
-      };
-    }
-    
-    // Run source-map-explorer on each file
-    const results = [];
-    for (const file of jsFiles) {
-      const output = execSync(`npx source-map-explorer ${path.join(buildDir, file)} --json`).toString();
-      const parsed = JSON.parse(output);
-      
-      // Extract the largest chunks
-      const bundles = Object.entries(parsed.files || {})
-        .sort((a, b) => b[1].size - a[1].size)
-        .slice(0, 5)
-        .map(([name, data]) => ({
-          name,
-          size: (data.size / 1024).toFixed(2) + ' KB',
-          percentage: (data.size / parsed.totalBytes * 100).toFixed(2) + '%'
-        }));
-      
-      results.push({
-        file,
-        totalSize: (parsed.totalBytes / 1024).toFixed(2) + ' KB',
-        largestChunks: bundles
+    // Search for imports in files
+    for (const dir of DIRECTORIES_TO_ANALYZE) {
+      traverseDirectory(dir, (filePath) => {
+        if (filePath.endsWith('.js') || filePath.endsWith('.ts') || filePath.endsWith('.tsx') || filePath.endsWith('.jsx')) {
+          const content = fs.readFileSync(filePath, 'utf8');
+          
+          for (const dep of dependencies) {
+            // Check for imports like 'import x from "dep"' or 'require("dep")'
+            if (content.includes(`from '${dep}'`) || 
+                content.includes(`from "${dep}"`) ||
+                content.includes(`require('${dep}')`) || 
+                content.includes(`require("${dep}")`)) {
+              dependencyUsage[dep]++;
+            }
+            
+            // Also check for submodule imports like 'import x from "dep/submodule"'
+            if (content.includes(`from '${dep}/`) || 
+                content.includes(`from "${dep}/`) ||
+                content.includes(`require('${dep}/`) || 
+                content.includes(`require("${dep}/`)) {
+              dependencyUsage[dep]++;
+            }
+          }
+        }
       });
     }
     
-    spinner.success({ text: `Analyzed bundle size for ${results.length} files` });
-    return {
-      recommendation: 'Consider code splitting, tree shaking, and lazy loading to reduce bundle sizes.',
-      details: results
-    };
+    // Find potentially unused dependencies
+    const unusedDependencies = Object.entries(dependencyUsage)
+      .filter(([dep, count]) => count === 0)
+      // Filter out common development tools that might not be directly imported
+      .filter(([dep]) => !['typescript', 'eslint', 'prettier', 'vitest', 'jest', 'babel'].includes(dep));
+    
+    log(`Found ${unusedDependencies.length} potentially unused dependencies`);
+    return unusedDependencies;
   } catch (error) {
-    spinner.error({ text: `Error analyzing bundle size: ${error.message}` });
-    return {
-      recommendation: 'Run a production build with source maps for accurate bundle analysis.',
-      details: []
-    };
-  }
-};
-
-// Check for unused dependencies
-const analyzeUnusedDependencies = () => {
-  const spinner = createSpinner('Checking for unused dependencies...').start();
-  
-  try {
-    // Check if depcheck is installed
-    try {
-      execSync('npx depcheck --version', { stdio: 'ignore' });
-    } catch (error) {
-      spinner.warn({ text: 'depcheck not found. Skipping unused dependencies check.' });
-      return {
-        recommendation: 'Install depcheck to find unused dependencies.',
-        unused: []
-      };
-    }
-    
-    // Run depcheck
-    const output = execSync('npx depcheck --json').toString();
-    const parsed = JSON.parse(output);
-    
-    const unused = Object.keys(parsed.dependencies || {});
-    
-    spinner.success({ text: `Found ${unused.length} unused dependencies` });
-    return {
-      recommendation: 'Consider removing unused dependencies to reduce bundle size and improve install times.',
-      unused
-    };
-  } catch (error) {
-    spinner.error({ text: `Error checking unused dependencies: ${error.message}` });
-    return {
-      recommendation: 'Run depcheck manually to find unused dependencies.',
-      unused: []
-    };
-  }
-};
-
-// Check for redundant API queries
-const analyzeRedundantQueries = (files) => {
-  const spinner = createSpinner('Analyzing API query patterns...').start();
-  const results = [];
-  
-  try {
-    for (const file of files) {
-      const content = fs.readFileSync(file, 'utf8');
-      
-      // Check for TanStack Query without proper query keys
-      if (
-        content.includes('useQuery') && 
-        !content.includes('staleTime') && 
-        !content.includes('cacheTime')
-      ) {
-        results.push({
-          file,
-          issue: 'Missing query cache configuration',
-          recommendation: 'Configure staleTime and cacheTime to reduce redundant network requests.'
-        });
-      }
-      
-      // Check for raw fetch without caching
-      if (
-        content.includes('fetch(') && 
-        !content.includes('cache:') && 
-        !content.includes('useQuery')
-      ) {
-        results.push({
-          file,
-          issue: 'Raw fetch without caching',
-          recommendation: 'Consider using TanStack Query or implementing a caching strategy for fetch calls.'
-        });
-      }
-      
-      // Check for axios without interceptors
-      if (
-        content.includes('axios') && 
-        !content.includes('interceptors')
-      ) {
-        results.push({
-          file,
-          issue: 'Axios without interceptors',
-          recommendation: 'Consider setting up axios interceptors for centralized request/response handling and caching.'
-        });
-      }
-    }
-    
-    spinner.success({ text: `Found ${results.length} potential API query optimizations` });
-    return results;
-  } catch (error) {
-    spinner.error({ text: `Error analyzing API queries: ${error.message}` });
+    log(`Error analyzing dependencies: ${error.message}`);
     return [];
   }
-};
+}
 
-// Generate the final report
-const generateReport = (analysis) => {
-  const spinner = createSpinner('Generating performance audit report...').start();
+// Function to generate optimizations recommendations
+function generateOptimizationRecommendations(data) {
+  log('Generating optimization recommendations...');
   
-  try {
-    let report = getReportHeader();
-    
-    // Component Size Analysis
-    report += '\n## Component Size Analysis\n\n';
-    if (analysis.largeComponents.length > 0) {
-      report += 'The following components exceed the recommended size threshold:\n\n';
-      report += '| File | Lines | Recommendation |\n';
-      report += '|------|-------|---------------|\n';
-      for (const component of analysis.largeComponents) {
-        report += `| ${component.file} | ${component.lines} | ${component.recommendation} |\n`;
-      }
-    } else {
-      report += 'No excessively large components found. Great job keeping components concise!\n';
-    }
-    
-    // Recursive Rendering Issues
-    report += '\n## Recursive Rendering Issues\n\n';
-    if (analysis.recursiveRenderingIssues.length > 0) {
-      report += 'The following components may have recursive rendering issues:\n\n';
-      report += '| File | Issue | Recommendation |\n';
-      report += '|------|-------|---------------|\n';
-      for (const issue of analysis.recursiveRenderingIssues) {
-        report += `| ${issue.file} | ${issue.issue} | ${issue.recommendation} |\n`;
-      }
-    } else {
-      report += 'No potential recursive rendering issues detected.\n';
-    }
-    
-    // Missing Memoization
-    report += '\n## Missing Memoization\n\n';
-    if (analysis.missingMemoization.length > 0) {
-      report += 'The following components could benefit from memoization:\n\n';
-      report += '| File | Issue | Recommendation |\n';
-      report += '|------|-------|---------------|\n';
-      for (const issue of analysis.missingMemoization) {
-        report += `| ${issue.file} | ${issue.issue} | ${issue.recommendation} |\n`;
-      }
-    } else {
-      report += 'No components found that require additional memoization.\n';
-    }
-    
-    // Inefficient Async Patterns
-    report += '\n## Inefficient Async Patterns\n\n';
-    if (analysis.asyncPatterns.length > 0) {
-      report += 'The following files contain inefficient async patterns:\n\n';
-      report += '| File | Issue | Recommendation |\n';
-      report += '|------|-------|---------------|\n';
-      for (const issue of analysis.asyncPatterns) {
-        report += `| ${issue.file} | ${issue.issue} | ${issue.recommendation} |\n`;
-      }
-    } else {
-      report += 'No inefficient async patterns detected.\n';
-    }
-    
-    // Database Query Optimizations
-    report += '\n## Database Query Optimizations\n\n';
-    if (analysis.databaseQueries.length > 0) {
-      report += 'The following files contain potential database query optimizations:\n\n';
-      report += '| File | Issue | Recommendation |\n';
-      report += '|------|-------|---------------|\n';
-      for (const issue of analysis.databaseQueries) {
-        report += `| ${issue.file} | ${issue.issue} | ${issue.recommendation} |\n`;
-      }
-    } else {
-      report += 'No database query optimization opportunities detected.\n';
-    }
-    
-    // Bundle Size Analysis
-    report += '\n## Bundle Size Analysis\n\n';
-    report += `Recommendation: ${analysis.bundleSize.recommendation}\n\n`;
-    if (analysis.bundleSize.details.length > 0) {
-      for (const bundle of analysis.bundleSize.details) {
-        report += `### ${bundle.file} (${bundle.totalSize})\n\n`;
-        report += '| Module | Size | Percentage |\n';
-        report += '|--------|------|------------|\n';
-        for (const chunk of bundle.largestChunks) {
-          report += `| ${chunk.name} | ${chunk.size} | ${chunk.percentage} |\n`;
-        }
-        report += '\n';
-      }
-    } else {
-      report += 'No bundle size details available.\n';
-    }
-    
-    // Unused Dependencies
-    report += '\n## Unused Dependencies\n\n';
-    report += `Recommendation: ${analysis.unusedDependencies.recommendation}\n\n`;
-    if (analysis.unusedDependencies.unused.length > 0) {
-      report += 'The following dependencies appear to be unused:\n\n';
-      report += '- ' + analysis.unusedDependencies.unused.join('\n- ') + '\n';
-    } else {
-      report += 'No unused dependencies detected.\n';
-    }
-    
-    // Redundant API Queries
-    report += '\n## Redundant API Queries\n\n';
-    if (analysis.redundantQueries.length > 0) {
-      report += 'The following files may contain redundant API queries:\n\n';
-      report += '| File | Issue | Recommendation |\n';
-      report += '|------|-------|---------------|\n';
-      for (const issue of analysis.redundantQueries) {
-        report += `| ${issue.file} | ${issue.issue} | ${issue.recommendation} |\n`;
-      }
-    } else {
-      report += 'No redundant API query patterns detected.\n';
-    }
-    
-    // Network Request Waterfall
-    report += '\n## Network Request Waterfall\n\n';
-    report += 'To analyze network request waterfalls:\n\n';
-    report += '1. Use the Network tab in your browser\'s Developer Tools\n';
-    report += '2. Look for sequential requests that could be parallelized\n';
-    report += '3. Identify long-running requests that block rendering\n';
-    report += '4. Check for appropriate caching headers\n';
-    
-    // Overall Recommendations
-    report += '\n## Recommendations\n\n';
-    const totalIssues = 
-      analysis.largeComponents.length +
-      analysis.recursiveRenderingIssues.length +
-      analysis.missingMemoization.length +
-      analysis.asyncPatterns.length +
-      analysis.databaseQueries.length +
-      analysis.redundantQueries.length +
-      analysis.unusedDependencies.unused.length;
-    
-    if (totalIssues > 0) {
-      report += 'Based on the analysis, here are the top recommendations:\n\n';
-      
-      if (analysis.largeComponents.length > 0) {
-        report += '1. **Refactor large components**: Break down components that exceed 300 lines into smaller, more manageable pieces.\n';
-      }
-      
-      if (analysis.missingMemoization.length > 0) {
-        report += '2. **Add memoization**: Use React.memo, useMemo, and useCallback to prevent unnecessary renders and computations.\n';
-      }
-      
-      if (analysis.databaseQueries.length > 0) {
-        report += '3. **Optimize database queries**: Select only necessary columns, add appropriate indexes, and prevent N+1 query problems.\n';
-      }
-      
-      if (analysis.asyncPatterns.length > 0) {
-        report += '4. **Improve async patterns**: Parallelize independent async operations and avoid sequential waterfalls.\n';
-      }
-      
-      if (analysis.redundantQueries.length > 0) {
-        report += '5. **Implement proper caching**: Configure TanStack Query properly or implement caching for fetch/axios calls.\n';
-      }
-      
-      if (analysis.unusedDependencies.unused.length > 0) {
-        report += '6. **Remove unused dependencies**: Clean up package.json to reduce bundle size and improve install times.\n';
-      }
-      
-      if (analysis.recursiveRenderingIssues.length > 0) {
-        report += '7. **Fix potential infinite loops**: Ensure useEffect dependencies are properly configured.\n';
-      }
-    } else {
-      report += 'No significant performance issues were detected. Here are some general recommendations:\n\n';
-      report += '1. **Implement code splitting**: Use dynamic imports to load code only when needed\n';
-      report += '2. **Add performance monitoring**: Set up tools like Lighthouse CI or Performance Monitoring in production\n';
-      report += '3. **Review third-party dependencies**: Regularly audit dependencies for size and performance impact\n';
-      report += '4. **Implement proper caching strategies**: Use service workers and CDN caching where appropriate\n';
-    }
-    
-    // Write report to file
-    fs.writeFileSync(config.reportFile, report);
-    spinner.success({ text: `Performance audit report generated: ${config.reportFile}` });
-    
-    return totalIssues;
-  } catch (error) {
-    spinner.error({ text: `Error generating report: ${error.message}` });
-    return 0;
+  const recommendations = [];
+  
+  // React optimizations
+  if (data.reactIssues.length > 0) {
+    recommendations.push({
+      category: 'React Performance',
+      title: 'React Component Optimizations',
+      description: 'The following components have potential performance issues:',
+      items: data.reactIssues.slice(0, 5).map(issue => 
+        `${issue.path} (Severity: ${issue.severity})`
+      ),
+      recommendations: [
+        'Use React.memo() for components that render often but with the same props',
+        'Use useCallback() for event handlers to prevent unnecessary re-renders',
+        'Use useMemo() for expensive calculations',
+        'Avoid creating objects and arrays in render (move them outside the component or use useMemo)',
+        'Ensure all useEffect hooks have proper dependency arrays',
+        'Avoid inline function definitions in JSX props'
+      ]
+    });
   }
-};
-
-// Main function
-const main = async () => {
-  console.log('\n🔍 Starting RAG Drive FTP Hub Performance Audit\n');
   
-  // Find all source files
-  const files = findFiles('.');
+  // Backend optimizations
+  if (data.backendIssues.length > 0) {
+    recommendations.push({
+      category: 'Backend Performance',
+      title: 'API and Database Optimizations',
+      description: 'The following server files have potential performance issues:',
+      items: data.backendIssues.slice(0, 5).map(issue => 
+        `${issue.path} (Severity: ${issue.severity})`
+      ),
+      recommendations: [
+        'Ensure all database queries are properly indexed',
+        'Implement pagination for all list endpoints',
+        'Add caching for frequently accessed data',
+        'Fix N+1 query problems by using proper JOIN operations or DataLoader pattern',
+        'Use specific field selection instead of SELECT * or find({})',
+        'Replace synchronous operations with asynchronous alternatives',
+        'Implement proper error handling for all async operations',
+        'Use database transactions for operations that modify multiple records'
+      ]
+    });
+  }
   
-  // Run various analyses
-  const largeComponents = config.rules.largeComponentCheck.enabled 
-    ? analyzeLargeComponents(files) 
-    : [];
+  // Code complexity optimizations
+  if (data.complexFiles.length > 0) {
+    const highComplexityFiles = data.complexFiles.filter(file => file.maxNestingLevel > 4 || file.lines > 300);
+    
+    if (highComplexityFiles.length > 0) {
+      recommendations.push({
+        category: 'Code Complexity',
+        title: 'Simplify Complex Code',
+        description: 'The following files have high complexity that could impact maintainability and performance:',
+        items: highComplexityFiles.slice(0, 5).map(file => 
+          `${file.path} (Lines: ${file.lines}, Max Nesting: ${file.maxNestingLevel})`
+        ),
+        recommendations: [
+          'Refactor large files into smaller, more focused modules',
+          'Break down complex functions into smaller, reusable functions',
+          'Reduce nesting levels by using early returns or extracting helper functions',
+          'Consider using functional programming patterns to simplify logic',
+          'Add comprehensive tests before refactoring to ensure behavior is preserved'
+        ]
+      });
+    }
+  }
   
-  const recursiveRenderingIssues = config.rules.recursiveRenderCheck.enabled 
-    ? analyzeRecursiveRenderingIssues(files) 
-    : [];
+  // Bundle size optimizations
+  if (data.bundleSize) {
+    recommendations.push({
+      category: 'Bundle Size',
+      title: 'Optimize Client Bundle Size',
+      description: 'Analyze and optimize the client bundle to improve loading performance:',
+      items: Object.entries(data.bundleSize).map(([category, info]) => 
+        `${category}: ${formatBytes(info.size)} (${info.count} files)`
+      ),
+      recommendations: [
+        'Implement code splitting using dynamic imports',
+        'Use React.lazy() for component lazy loading',
+        'Optimize images and other assets',
+        'Remove unused CSS with tools like PurgeCSS',
+        'Consider using a bundle analyzer to identify large dependencies',
+        'Implement tree-shaking for all imports'
+      ]
+    });
+  }
   
-  const missingMemoization = config.rules.memoCheck.enabled 
-    ? analyzeMissingMemoization(files) 
-    : [];
+  // Unused dependencies
+  if (data.unusedDependencies.length > 0) {
+    recommendations.push({
+      category: 'Dependencies',
+      title: 'Remove Unused Dependencies',
+      description: 'The following dependencies appear to be unused in the codebase:',
+      items: data.unusedDependencies.slice(0, 10).map(([dep]) => dep),
+      recommendations: [
+        'Remove unused dependencies to reduce bundle size',
+        'Audit dependencies for security vulnerabilities',
+        'Consider using lighter alternatives for large dependencies',
+        'Use dynamic imports for dependencies only needed in specific situations'
+      ]
+    });
+  }
   
-  const asyncPatterns = config.rules.asyncComponentCheck.enabled 
-    ? analyzeAsyncPatterns(files) 
-    : [];
-  
-  const databaseQueries = config.rules.dbQueryCheck.enabled 
-    ? analyzeDatabaseQueries(files) 
-    : [];
-  
-  const bundleSize = config.rules.bundleSizeCheck.enabled 
-    ? analyzeBundleSize() 
-    : { recommendation: 'Bundle size analysis skipped.', details: [] };
-  
-  const unusedDependencies = config.rules.unusedDependencyCheck.enabled 
-    ? analyzeUnusedDependencies() 
-    : { recommendation: 'Unused dependencies check skipped.', unused: [] };
-  
-  const redundantQueries = config.rules.redundantQueryCheck.enabled 
-    ? analyzeRedundantQueries(files) 
-    : [];
-  
-  // Generate report
-  const totalIssues = generateReport({
-    largeComponents,
-    recursiveRenderingIssues,
-    missingMemoization,
-    asyncPatterns,
-    databaseQueries,
-    bundleSize,
-    unusedDependencies,
-    redundantQueries
+  // General optimizations
+  recommendations.push({
+    category: 'General Optimizations',
+    title: 'General Performance Improvements',
+    description: 'Consider these general optimization strategies:',
+    items: [],
+    recommendations: [
+      'Implement proper caching strategies (HTTP caching, in-memory caching, etc.)',
+      'Use compression for HTTP responses',
+      'Optimize critical rendering path for faster page loads',
+      'Implement proper error boundaries in React components',
+      'Use performance monitoring tools to identify bottlenecks',
+      'Configure Content Security Policy to improve security',
+      'Ensure accessibility standards are met for better user experience'
+    ]
   });
   
-  // Summary
-  console.log('\n📊 Performance Audit Summary:\n');
-  console.log(`- ${largeComponents.length} large components`);
-  console.log(`- ${recursiveRenderingIssues.length} potential recursive rendering issues`);
-  console.log(`- ${missingMemoization.length} components missing memoization`);
-  console.log(`- ${asyncPatterns.length} inefficient async patterns`);
-  console.log(`- ${databaseQueries.length} database query optimizations`);
-  console.log(`- ${unusedDependencies.unused.length} unused dependencies`);
-  console.log(`- ${redundantQueries.length} redundant API query patterns`);
-  console.log(`\nTotal issues found: ${totalIssues}`);
-  console.log(`\nReport saved to: ${config.reportFile}`);
-  console.log('\n🚀 Performance audit complete!\n');
-};
+  log(`Generated ${recommendations.length} optimization recommendations`);
+  return recommendations;
+}
+
+// Helper function to format bytes
+function formatBytes(bytes, decimals = 2) {
+  if (bytes === 0) return '0 Bytes';
+  
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+// Function to generate the final report
+function generateReport(data, recommendations) {
+  log('Generating performance audit report...');
+  
+  const reportContent = `# RAG Drive FTP Hub Performance Audit Report
+
+Generated on: ${new Date().toLocaleString()}
+
+## Executive Summary
+
+This report provides an analysis of the current codebase with a focus on performance optimizations. The goal is to identify areas that could be improved to enhance the user experience, reduce resource usage, and ensure the application performs well at scale.
+
+## Performance Overview
+
+### Code Complexity
+
+${data.complexFiles.length > 0 ? `
+| File | Lines | Functions | Max Nesting Level |
+|------|-------|-----------|------------------|
+${data.complexFiles.slice(0, 10).map(file => `| ${file.path} | ${file.lines} | ${file.functions} | ${file.maxNestingLevel} |`).join('\n')}
+` : 'No complex files detected.'}
+
+### React Component Analysis
+
+${data.reactIssues.length > 0 ? `
+| Component | Severity | Issues |
+|-----------|----------|--------|
+${data.reactIssues.slice(0, 10).map(issue => `| ${issue.path} | ${issue.severity} | ${Object.entries(issue.issues).filter(([_, value]) => value).map(([key]) => key).join(', ')} |`).join('\n')}
+` : 'No React performance issues detected.'}
+
+### Backend Performance
+
+${data.backendIssues.length > 0 ? `
+| File | Severity | Issues |
+|------|----------|--------|
+${data.backendIssues.slice(0, 10).map(issue => `| ${issue.path} | ${issue.severity} | ${Object.entries(issue.issues).filter(([_, value]) => value).map(([key]) => key).join(', ')} |`).join('\n')}
+` : 'No backend performance issues detected.'}
+
+### Large Files
+
+${data.fileSizes.length > 0 ? `
+| File | Size | Last Modified |
+|------|------|---------------|
+${data.fileSizes.slice(0, 10).map(file => `| ${file.path} | ${formatBytes(file.size)} | ${file.lastModified.toLocaleString()} |`).join('\n')}
+` : 'No large files detected.'}
+
+### Bundle Size Analysis
+
+| Category | Size | File Count |
+|----------|------|------------|
+${Object.entries(data.bundleSize).map(([category, info]) => `| ${category} | ${formatBytes(info.size)} | ${info.count} |`).join('\n')}
+
+### Unused Dependencies
+
+${data.unusedDependencies.length > 0 ? `
+The following dependencies appear to be unused in the codebase:
+
+${data.unusedDependencies.slice(0, 15).map(([dep]) => `- ${dep}`).join('\n')}
+` : 'No unused dependencies detected.'}
+
+## Optimization Recommendations
+
+${recommendations.map(rec => `
+### ${rec.category}: ${rec.title}
+
+${rec.description}
+
+${rec.items.length > 0 ? `#### Affected Objects:\n${rec.items.map(item => `- ${item}`).join('\n')}` : ''}
+
+#### Recommendations:
+${rec.recommendations.map(r => `- ${r}`).join('\n')}
+`).join('\n')}
+
+## Implementation Steps
+
+1. **Prior to making changes:**
+   - Create a performance baseline to measure improvements against
+   - Identify the highest impact changes to prioritize
+   - Set up monitoring to measure the impact of changes
+
+2. **Implementation priority:**
+   - Address critical backend performance issues first
+   - Optimize React components with the highest severity
+   - Implement code splitting and lazy loading
+   - Remove unused dependencies
+   - Simplify complex code
+
+3. **Testing:**
+   - Performance test each change to measure its impact
+   - Ensure functional tests pass after optimizations
+   - Test under various load conditions to ensure scalability
+
+## Conclusion
+
+By implementing these recommendations, you can expect improved application performance, better user experience, and more maintainable code. Performance optimization should be an ongoing process, with regular audits and improvements.
+
+---
+
+*This report was generated automatically by the RAG Drive FTP Hub Performance Audit Tool. For assistance with implementing these recommendations, please contact the development team.*
+`;
+  
+  fs.writeFileSync(REPORT_FILE, reportContent);
+  log(`Report generated and saved to ${REPORT_FILE}`);
+}
+
+// Main function
+function main() {
+  log('Starting performance audit analysis...');
+  
+  try {
+    // Analyze codebase
+    const fileSizes = analyzeFileSizes();
+    const complexFiles = analyzeCodeComplexity();
+    const reactIssues = analyzeReactPerformance();
+    const backendIssues = analyzeBackendPerformance();
+    const bundleSize = analyzeBundleSize();
+    const unusedDependencies = analyzeUnusedDependencies();
+    
+    // Compile data
+    const data = {
+      fileSizes,
+      complexFiles,
+      reactIssues,
+      backendIssues,
+      bundleSize,
+      unusedDependencies
+    };
+    
+    // Generate recommendations
+    const recommendations = generateOptimizationRecommendations(data);
+    
+    // Generate report
+    generateReport(data, recommendations);
+    
+    log('Performance audit completed successfully');
+    return 0;
+  } catch (error) {
+    log(`Error during performance audit: ${error.message}`);
+    return 1;
+  }
+}
 
 // Run the main function
-main().catch(error => {
-  console.error('Error running performance audit:', error);
-  process.exit(1);
-});
+process.exit(main());

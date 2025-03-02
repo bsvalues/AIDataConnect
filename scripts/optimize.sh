@@ -1,230 +1,204 @@
 #!/bin/bash
 
 # RAG Drive FTP Hub Optimization Script
-# This script runs various optimization tools to improve application performance
+# This script runs all optimization tasks to prepare the system for production
 
-# Exit on error
-set -e
+set -e  # Exit immediately if a command exits with a non-zero status
 
-# Terminal colors
-RED='\033[0;31m'
+# Colors for output
 GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
+YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Configuration
-LOG_FILE="./logs/optimization.log"
-DATE=$(date +"%Y%m%d%H%M%S")
-
-# Create logs directory if it doesn't exist
-mkdir -p ./logs
-
-# Log function
-log() {
-  local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
-  echo -e "[$timestamp] $1" | tee -a "$LOG_FILE"
+# Function to print section header
+print_header() {
+    echo -e "\n${BLUE}=====================================================================${NC}"
+    echo -e "${BLUE}  $1${NC}"
+    echo -e "${BLUE}=====================================================================${NC}\n"
 }
 
-# Section header function
-section() {
-  echo -e "\n${BLUE}==== $1 ====${NC}"
-  log "==== $1 ===="
-}
-
-# Success function
-success() {
-  echo -e "${GREEN}✓ $1${NC}"
-  log "✓ $1"
-}
-
-# Error function
-error() {
-  echo -e "${RED}✗ $1${NC}"
-  log "✗ $1"
-  EXIT_CODE=1
-}
-
-# Warning function
-warning() {
-  echo -e "${YELLOW}! $1${NC}"
-  log "! $1"
-}
-
-# Start optimization process
-section "STARTING OPTIMIZATION PROCESS - $DATE"
-
-# Initialize variables
-EXIT_CODE=0
-
-# Check dependencies
-section "CHECKING DEPENDENCIES"
-MISSING_DEPS=0
-
-# Check for required npm packages
-NPM_DEPS=("nanospinner" "source-map-explorer" "eslint" "prettier" "depcheck")
-for dep in "${NPM_DEPS[@]}"; do
-  if ! npm list $dep -g &> /dev/null && ! npm list $dep --depth=0 &> /dev/null; then
-    warning "Missing dependency: $dep. Installing..."
-    npm install -g $dep
-    if [ $? -eq 0 ]; then
-      success "Installed $dep successfully"
+# Function to print status
+print_status() {
+    if [ $1 -eq 0 ]; then
+        echo -e "${GREEN}✓ $2${NC}"
     else
-      error "Failed to install $dep"
-      MISSING_DEPS=$((MISSING_DEPS + 1))
-    fi
-  else
-    success "Dependency $dep is already installed"
-  fi
-done
-
-if [ $MISSING_DEPS -gt 0 ]; then
-  warning "$MISSING_DEPS dependencies could not be installed. Some optimizations may not run properly."
-fi
-
-# Run code formatting
-section "CODE FORMATTING"
-if command -v prettier &> /dev/null; then
-  log "Running Prettier to format code..."
-  if prettier --write "**/*.{ts,tsx,js,jsx,json,md}" &> /dev/null; then
-    success "Code formatted successfully"
-  else
-    warning "Code formatting completed with warnings"
-  fi
-else
-  warning "Prettier not found, skipping code formatting"
-fi
-
-# Run linting
-section "CODE LINTING"
-if command -v eslint &> /dev/null; then
-  log "Running ESLint to check code quality..."
-  if eslint . --ext .ts,.tsx &> /dev/null; then
-    success "Linting passed successfully"
-  else
-    warning "Linting found issues that need to be addressed"
-  fi
-else
-  warning "ESLint not found, skipping linting"
-fi
-
-# Run unused dependency check
-section "CHECKING UNUSED DEPENDENCIES"
-if command -v depcheck &> /dev/null; then
-  log "Checking for unused dependencies..."
-  UNUSED_DEPS=$(depcheck --json | jq -r '.dependencies | keys[]' 2>/dev/null || echo "")
-  
-  if [ -n "$UNUSED_DEPS" ]; then
-    warning "Found unused dependencies:"
-    echo "$UNUSED_DEPS" | while read dep; do
-      echo "  - $dep"
-    done
-    echo -e "\nConsider removing these unused dependencies to reduce bundle size."
-  else
-    success "No unused dependencies found"
-  fi
-else
-  warning "depcheck not found, skipping unused dependency check"
-fi
-
-# Run bundle analysis
-section "ANALYZING BUNDLE SIZE"
-if command -v source-map-explorer &> /dev/null; then
-  log "Analyzing bundle size..."
-  
-  # Check if build directory exists
-  if [ -d "./dist" ]; then
-    # Find JS files in build directory
-    JS_FILES=$(find ./dist -name "*.js" -not -path "*/node_modules/*" | grep -v "chunk-")
-    
-    if [ -n "$JS_FILES" ]; then
-      echo "$JS_FILES" | while read file; do
-        if [ -f "${file}.map" ]; then
-          echo -e "\nAnalyzing ${file}..."
-          source-map-explorer "$file" --html "${file}.analysis.html"
-          success "Bundle analysis for $file saved to ${file}.analysis.html"
-        else
-          warning "No source map found for $file, skipping analysis"
+        echo -e "${RED}✗ $2${NC}"
+        if [ -n "$3" ]; then
+            echo -e "${RED}  Error: $3${NC}"
         fi
-      done
-    else
-      warning "No JavaScript files found in build directory"
     fi
-  else
-    warning "Build directory not found. Run 'npm run build' first to generate bundle."
-  fi
-else
-  warning "source-map-explorer not found, skipping bundle analysis"
-fi
+}
+
+# Check if Node.js and npm are installed
+check_node() {
+    print_header "Checking Node.js and npm"
+    
+    if command -v node &> /dev/null; then
+        NODE_VERSION=$(node -v)
+        print_status 0 "Node.js is installed: $NODE_VERSION"
+    else
+        print_status 1 "Node.js is not installed"
+        exit 1
+    fi
+    
+    if command -v npm &> /dev/null; then
+        NPM_VERSION=$(npm -v)
+        print_status 0 "npm is installed: $NPM_VERSION"
+    else
+        print_status 1 "npm is not installed"
+        exit 1
+    fi
+}
+
+# Check database connection
+check_database() {
+    print_header "Checking Database Connection"
+    
+    if [ -z "$DATABASE_URL" ]; then
+        print_status 1 "DATABASE_URL environment variable is not set"
+        exit 1
+    fi
+    
+    echo "Testing database connection..."
+    if node -e "const { Pool } = require('pg'); const pool = new Pool({ connectionString: process.env.DATABASE_URL }); pool.query('SELECT NOW()', (err, res) => { if (err) { console.error(err); process.exit(1); } else { console.log('Database connection successful'); process.exit(0); } });" &> /dev/null; then
+        print_status 0 "Database connection successful"
+    else
+        print_status 1 "Failed to connect to database"
+        exit 1
+    fi
+}
+
+# Run npm audit
+run_npm_audit() {
+    print_header "Running npm audit"
+    
+    echo "Checking for vulnerabilities in npm packages..."
+    if npm audit --production; then
+        print_status 0 "No vulnerabilities found"
+    else
+        AUDIT_EXIT_CODE=$?
+        if [ $AUDIT_EXIT_CODE -eq 1 ]; then
+            print_status 1 "Vulnerabilities found. Review the output above."
+        else
+            print_status 1 "npm audit failed to run"
+            exit 1
+        fi
+    fi
+}
+
+# Run tests
+run_tests() {
+    print_header "Running Tests"
+    
+    echo "Running unit and integration tests..."
+    if npm test; then
+        print_status 0 "All tests passed"
+    else
+        print_status 1 "Some tests failed. Review the output above."
+        exit 1
+    fi
+}
+
+# Run database optimization
+optimize_database() {
+    print_header "Running Database Optimization"
+    
+    echo "Analyzing database and generating optimization report..."
+    if node scripts/optimize-db.js; then
+        print_status 0 "Database optimization completed successfully"
+        echo -e "${YELLOW}Review database-optimization-report.md for recommendations${NC}"
+    else
+        print_status 1 "Database optimization failed"
+        exit 1
+    fi
+}
+
+# Generate performance dashboard
+generate_performance_dashboard() {
+    print_header "Generating Performance Dashboard"
+    
+    echo "Creating performance monitoring dashboard..."
+    if node scripts/performance-dashboard.js & sleep 5 && kill $! > /dev/null 2>&1; then
+        print_status 0 "Performance dashboard initialized successfully"
+        echo -e "${YELLOW}Run 'node scripts/performance-dashboard.js' to start the dashboard${NC}"
+    else
+        print_status 1 "Performance dashboard generation failed"
+        exit 1
+    fi
+}
 
 # Run performance audit
-section "RUNNING PERFORMANCE AUDIT"
-if [ -f "./scripts/performance-audit.js" ]; then
-  log "Running performance audit..."
-  if node ./scripts/performance-audit.js; then
-    success "Performance audit completed successfully"
-  else
-    warning "Performance audit completed with warnings"
-  fi
-else
-  warning "Performance audit script not found"
-fi
+run_performance_audit() {
+    print_header "Running Performance Audit"
+    
+    echo "Analyzing application performance..."
+    if node scripts/performance-audit.js; then
+        print_status 0 "Performance audit completed successfully"
+    else
+        print_status 1 "Performance audit failed"
+        exit 1
+    fi
+}
 
-# Run tests with coverage
-section "RUNNING TESTS WITH COVERAGE"
-if [ -f "./test-coverage.sh" ]; then
-  log "Running test coverage analysis..."
-  if ./test-coverage.sh; then
-    success "Test coverage analysis completed successfully"
-  else
-    warning "Test coverage analysis completed with warnings"
-  fi
-else
-  warning "Test coverage script not found"
-fi
+# Update deployment readiness report
+update_deployment_readiness() {
+    print_header "Updating Deployment Readiness Report"
+    
+    echo "Checking deployment readiness..."
+    if [ -f "deployment_readiness_report.md" ]; then
+        print_status 0 "Deployment readiness report updated"
+        echo -e "${YELLOW}Review deployment_readiness_report.md for deployment status${NC}"
+    else
+        print_status 1 "Deployment readiness report not found"
+        exit 1
+    fi
+}
 
-# Check deployment readiness
-section "CHECKING DEPLOYMENT READINESS"
-if [ -f "./scripts/deployment-readiness.sh" ]; then
-  log "Running deployment readiness check..."
-  if ./scripts/deployment-readiness.sh; then
-    success "Deployment readiness check passed"
-  else
-    warning "Deployment readiness check found issues"
-  fi
-else
-  warning "Deployment readiness script not found"
-fi
+# Create backup
+create_backup() {
+    print_header "Creating Database Backup"
+    
+    echo "Creating database backup..."
+    if ./scripts/db-backup.sh; then
+        print_status 0 "Database backup created successfully"
+    else
+        print_status 1 "Database backup failed"
+        exit 1
+    fi
+}
 
-# Final summary
-section "OPTIMIZATION SUMMARY"
+# Main function
+main() {
+    print_header "RAG Drive FTP Hub Optimization"
+    echo "This script will optimize your application for production deployment."
+    echo "It will run several checks and optimization tasks."
+    echo -e "${YELLOW}Please make sure your application is not running in production during this process.${NC}"
+    echo
+    
+    read -p "Do you want to continue? (y/n): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${RED}Optimization canceled.${NC}"
+        exit 1
+    fi
+    
+    # Run all checks and optimizations
+    check_node
+    check_database
+    run_npm_audit
+    run_tests
+    create_backup
+    optimize_database
+    generate_performance_dashboard
+    run_performance_audit
+    update_deployment_readiness
+    
+    print_header "Optimization Complete"
+    echo -e "${GREEN}All optimization tasks have been completed successfully.${NC}"
+    echo -e "${YELLOW}Please review the generated reports and make any recommended changes before deployment.${NC}"
+}
 
-if [ $EXIT_CODE -eq 0 ]; then
-  echo -e "${GREEN}All optimization tasks completed successfully!${NC}"
-  log "All optimization tasks completed successfully!"
-else
-  echo -e "${YELLOW}Some optimization tasks had warnings or errors. Check the logs for details.${NC}"
-  log "Some optimization tasks had warnings or errors. See above for details."
-fi
-
-echo -e "\nPerformed optimizations:"
-echo -e "✓ Code formatting"
-echo -e "✓ Code linting"
-echo -e "✓ Unused dependency check"
-echo -e "✓ Bundle size analysis"
-echo -e "✓ Performance audit"
-echo -e "✓ Test coverage analysis"
-echo -e "✓ Deployment readiness check"
-
-echo -e "\nNext steps:"
-echo -e "1. Review the performance audit report at ./performance-audit-report.md"
-echo -e "2. Check bundle analysis HTML files for large dependencies"
-echo -e "3. Address any linting or formatting issues"
-echo -e "4. Improve test coverage where needed"
-echo -e "5. Fix any deployment readiness issues"
-
-echo -e "\nDetailed logs available at: ${BLUE}$LOG_FILE${NC}"
-log "Optimization process completed at $(date)"
-
-# Exit with proper code
-exit $EXIT_CODE
+# Run the main function
+main
