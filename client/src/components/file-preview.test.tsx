@@ -2,18 +2,36 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { FilePreview } from './file-preview';
 
+// Create a simplified File type for testing
+type TestFile = {
+  id: number;
+  name: string;
+  path: string;
+  type: string;
+  size: number;
+  userId: number;
+  metadata: Record<string, any> | null;
+  aiSummary: string | null;
+  category: string | null;
+  createdAt: Date | null;
+  transferType: string | null;
+  ftpConfig: Record<string, any> | null;
+};
+
 describe('FilePreview Component', () => {
-  const mockFile = {
+  const mockFile: File = {
     id: 1,
     name: 'test-document.pdf',
     path: '/uploads/test-document.pdf',
     type: 'application/pdf',
     size: 1024 * 1024, // 1MB
     userId: 1,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    processingStatus: 'completed',
-    metadata: { pages: 10, author: 'Test Author' }
+    metadata: { pages: 10, author: 'Test Author' },
+    aiSummary: null,
+    category: null,
+    createdAt: new Date(),
+    transferType: 'local',
+    ftpConfig: null
   };
 
   it('renders file details correctly', () => {
@@ -25,53 +43,86 @@ describe('FilePreview Component', () => {
   });
 
   it('renders different file types with correct labels', () => {
-    const textFile = { ...mockFile, name: 'notes.txt', type: 'text/plain' };
+    const textFile: File = { 
+      ...mockFile, 
+      name: 'notes.txt', 
+      type: 'text/plain' 
+    };
     const { rerender } = render(<FilePreview file={textFile} />);
     expect(screen.getByText('Text File')).toBeInTheDocument();
     
-    const imageFile = { ...mockFile, name: 'photo.jpg', type: 'image/jpeg' };
+    const imageFile: File = { 
+      ...mockFile, 
+      name: 'photo.jpg', 
+      type: 'image/jpeg' 
+    };
     rerender(<FilePreview file={imageFile} />);
     expect(screen.getByText('JPEG Image')).toBeInTheDocument();
     
-    const csvFile = { ...mockFile, name: 'data.csv', type: 'text/csv' };
+    const csvFile: File = { 
+      ...mockFile, 
+      name: 'data.csv', 
+      type: 'text/csv' 
+    };
     rerender(<FilePreview file={csvFile} />);
     expect(screen.getByText('CSV File')).toBeInTheDocument();
   });
 
   it('formats file sizes correctly', () => {
-    const smallFile = { ...mockFile, size: 512 }; // 512B
+    const smallFile: File = { 
+      ...mockFile, 
+      size: 512 // 512B
+    };
     const { rerender } = render(<FilePreview file={smallFile} />);
     expect(screen.getByText('512 B')).toBeInTheDocument();
     
-    const mediumFile = { ...mockFile, size: 1536 }; // 1.5KB
+    const mediumFile: File = { 
+      ...mockFile, 
+      size: 1536 // 1.5KB
+    };
     rerender(<FilePreview file={mediumFile} />);
     expect(screen.getByText('1.50 KB')).toBeInTheDocument();
     
-    const largeFile = { ...mockFile, size: 2.5 * 1024 * 1024 }; // 2.5MB
+    const largeFile: File = { 
+      ...mockFile, 
+      size: 2.5 * 1024 * 1024 // 2.5MB
+    };
     rerender(<FilePreview file={largeFile} />);
     expect(screen.getByText('2.50 MB')).toBeInTheDocument();
     
-    const extraLargeFile = { ...mockFile, size: 3 * 1024 * 1024 * 1024 }; // 3GB
+    const extraLargeFile: File = { 
+      ...mockFile, 
+      size: 3 * 1024 * 1024 * 1024 // 3GB
+    };
     rerender(<FilePreview file={extraLargeFile} />);
     expect(screen.getByText('3.00 GB')).toBeInTheDocument();
   });
 
-  it('displays processing status', () => {
-    const processingFile = { ...mockFile, processingStatus: 'processing' };
+  it('displays file status information', () => {
+    const processingFile: File = { 
+      ...mockFile, 
+      metadata: { ...mockFile.metadata, status: 'processing' } 
+    };
     const { rerender } = render(<FilePreview file={processingFile} />);
-    expect(screen.getByText(/Processing/i)).toBeInTheDocument();
+    expect(screen.getByText(/processing/i, { exact: false })).toBeInTheDocument();
     
-    const pendingFile = { ...mockFile, processingStatus: 'pending' };
+    const pendingFile: File = { 
+      ...mockFile, 
+      metadata: { ...mockFile.metadata, status: 'pending' } 
+    };
     rerender(<FilePreview file={pendingFile} />);
-    expect(screen.getByText(/Pending/i)).toBeInTheDocument();
+    expect(screen.getByText(/pending/i, { exact: false })).toBeInTheDocument();
     
-    const errorFile = { ...mockFile, processingStatus: 'error' };
+    const errorFile: File = { 
+      ...mockFile, 
+      metadata: { ...mockFile.metadata, status: 'error' } 
+    };
     rerender(<FilePreview file={errorFile} />);
-    expect(screen.getByText(/Error/i)).toBeInTheDocument();
+    expect(screen.getByText(/error/i, { exact: false })).toBeInTheDocument();
   });
 
   it('displays file metadata when available', () => {
-    const fileWithMetadata = { 
+    const fileWithMetadata: File = { 
       ...mockFile, 
       metadata: { 
         pages: 15, 
