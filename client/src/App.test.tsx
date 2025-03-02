@@ -110,7 +110,7 @@ describe('App Component', () => {
     useLocationMock.mockReturnValue(['/login', navigateMock]);
     
     // Mock successful authentication check
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ id: 1, username: 'testuser' }),
     });
@@ -129,7 +129,7 @@ describe('App Component', () => {
     useLocationMock.mockReturnValue(['/dashboard', navigateMock]);
     
     // Mock failed authentication check
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: false,
       status: 401,
     });
@@ -143,7 +143,7 @@ describe('App Component', () => {
 
   it('renders the loading state while checking authentication', async () => {
     // Mock a slow authentication check
-    (global.fetch as jest.Mock).mockImplementationOnce(() => 
+    (global.fetch as any).mockImplementationOnce(() => 
       new Promise(resolve => setTimeout(() => 
         resolve({
           ok: true,
@@ -175,7 +175,7 @@ describe('App Component', () => {
     useLocationMock.mockReturnValue(['/dashboard', vi.fn()]);
     
     // Mock successful authentication check
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ id: 1, username: 'testuser' }),
     });
