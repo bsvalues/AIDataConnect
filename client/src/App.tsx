@@ -60,8 +60,8 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     queryKey: ['/api/auth/me'],
     queryFn: async () => {
       try {
-        const data = await apiRequest('/api/auth/me', 'GET');
-        return data;
+        const response = await apiRequest('GET', '/api/auth/me');
+        return await response.json();
       } catch (error) {
         return null;
       }
@@ -78,7 +78,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await apiRequest('/api/auth/logout', 'POST');
+      await apiRequest('POST', '/api/auth/logout');
       setUser(null);
       queryClient.invalidateQueries();
       toast({
@@ -234,13 +234,13 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <Switch>
-            <Route path="/login" component={Login} />
-            <Route path="/register" component={Register} />
-            <Route>
-              <AppLayout />
-            </Route>
-          </Switch>
+          <Suspense fallback={<PageLoader />}>
+            <Switch>
+              <Route path="/login" component={() => <PublicRoute component={Login} />} />
+              <Route path="/register" component={() => <PublicRoute component={Register} />} />
+              <Route component={AppLayout} />
+            </Switch>
+          </Suspense>
           <Toaster />
         </AuthProvider>
       </QueryClientProvider>

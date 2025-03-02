@@ -1,6 +1,6 @@
 import { Client } from "basic-ftp";
 import { FtpSrv, FtpServer } from "ftp-srv";
-import { storage } from "../storage";
+import { storage } from "../storage-manager";
 import type { File } from "@shared/schema";
 import path from "path";
 import fs from "fs/promises";

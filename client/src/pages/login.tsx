@@ -36,7 +36,7 @@ export default function Login() {
   const mutation = useMutation({
     mutationFn: (values: z.infer<typeof loginSchema>) => {
       setIsLoading(true);
-      return apiRequest("/api/auth/login", "POST", values);
+      return apiRequest("POST", "/api/auth/login", values);
     },
     onSuccess: () => {
       toast({

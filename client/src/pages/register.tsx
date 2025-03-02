@@ -43,7 +43,7 @@ export default function Register() {
       setIsLoading(true);
       // Remove confirmPassword before sending to API
       const { confirmPassword, ...userData } = values;
-      return apiRequest("/api/auth/register", "POST", userData);
+      return apiRequest("POST", "/api/auth/register", userData);
     },
     onSuccess: () => {
       toast({

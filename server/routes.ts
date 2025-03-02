@@ -68,6 +68,11 @@ function isAuthenticated(req: Request, res: Response, next: NextFunction) {
 export async function registerRoutes(app: Express, server: Server): Promise<Server> {
   await ensureUploadsDirectory();
   
+  // Add a test protected route for authentication testing
+  app.get("/api/auth/protected", isAuthenticated, (_req: Request, res: Response) => {
+    res.json({ message: "This is a protected route" });
+  });
+  
   // Set up session middleware
   app.use(session({
     secret: process.env.SESSION_SECRET || 'rag-drive-secret',
@@ -134,13 +139,18 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
         return res.status(401).json({ message: "Invalid username or password" });
       }
       
-      // Set user in session
+      // Set user in session and save
       req.session.userId = user.id;
-      
-      // Remove password from response
-      const { password: _, ...userWithoutPassword } = user;
-      
-      res.json(userWithoutPassword);
+      req.session.save((err) => {
+        if (err) {
+          logger.error('Session save error:', err);
+          return res.status(500).json({ message: "Error saving session" });
+        }
+        
+        // Remove password from response
+        const { password: _, ...userWithoutPassword } = user;
+        res.json(userWithoutPassword);
+      });
     } catch (error) {
       res.status(500).json({ message: handleError(error) });
     }
