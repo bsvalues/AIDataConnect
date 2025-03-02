@@ -2,8 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { FilePreview } from './file-preview';
 
-// Create a simplified File type for testing
-type TestFile = {
+// Mock for the schema module
+vi.mock('@shared/schema', () => ({
+  // No need to return anything for our test case
+}));
+
+// Create a type that matches the component's expected props
+type MockFile = {
   id: number;
   name: string;
   path: string;
@@ -15,11 +20,19 @@ type TestFile = {
   category: string | null;
   createdAt: Date | null;
   transferType: string | null;
-  ftpConfig: Record<string, any> | null;
+  ftpConfig: null | {
+    host: string;
+    port: number;
+    user: string;
+    password: string;
+    secure: boolean;
+    passive: boolean;
+  };
 };
 
 describe('FilePreview Component', () => {
-  const mockFile: File = {
+  // Set up mock data that matches the File type
+  const mockFile = {
     id: 1,
     name: 'test-document.pdf',
     path: '/uploads/test-document.pdf',
@@ -32,7 +45,7 @@ describe('FilePreview Component', () => {
     createdAt: new Date(),
     transferType: 'local',
     ftpConfig: null
-  };
+  } as MockFile;
 
   it('renders file details correctly', () => {
     render(<FilePreview file={mockFile} />);
@@ -43,7 +56,7 @@ describe('FilePreview Component', () => {
   });
 
   it('renders different file types with correct labels', () => {
-    const textFile: File = { 
+    const textFile: MockFile = { 
       ...mockFile, 
       name: 'notes.txt', 
       type: 'text/plain' 
@@ -51,7 +64,7 @@ describe('FilePreview Component', () => {
     const { rerender } = render(<FilePreview file={textFile} />);
     expect(screen.getByText('Text File')).toBeInTheDocument();
     
-    const imageFile: File = { 
+    const imageFile: MockFile = { 
       ...mockFile, 
       name: 'photo.jpg', 
       type: 'image/jpeg' 
@@ -59,7 +72,7 @@ describe('FilePreview Component', () => {
     rerender(<FilePreview file={imageFile} />);
     expect(screen.getByText('JPEG Image')).toBeInTheDocument();
     
-    const csvFile: File = { 
+    const csvFile: MockFile = { 
       ...mockFile, 
       name: 'data.csv', 
       type: 'text/csv' 
@@ -69,28 +82,28 @@ describe('FilePreview Component', () => {
   });
 
   it('formats file sizes correctly', () => {
-    const smallFile: File = { 
+    const smallFile: MockFile = { 
       ...mockFile, 
       size: 512 // 512B
     };
     const { rerender } = render(<FilePreview file={smallFile} />);
     expect(screen.getByText('512 B')).toBeInTheDocument();
     
-    const mediumFile: File = { 
+    const mediumFile: MockFile = { 
       ...mockFile, 
       size: 1536 // 1.5KB
     };
     rerender(<FilePreview file={mediumFile} />);
     expect(screen.getByText('1.50 KB')).toBeInTheDocument();
     
-    const largeFile: File = { 
+    const largeFile: MockFile = { 
       ...mockFile, 
       size: 2.5 * 1024 * 1024 // 2.5MB
     };
     rerender(<FilePreview file={largeFile} />);
     expect(screen.getByText('2.50 MB')).toBeInTheDocument();
     
-    const extraLargeFile: File = { 
+    const extraLargeFile: MockFile = { 
       ...mockFile, 
       size: 3 * 1024 * 1024 * 1024 // 3GB
     };
@@ -99,21 +112,21 @@ describe('FilePreview Component', () => {
   });
 
   it('displays file status information', () => {
-    const processingFile: File = { 
+    const processingFile: MockFile = { 
       ...mockFile, 
       metadata: { ...mockFile.metadata, status: 'processing' } 
     };
     const { rerender } = render(<FilePreview file={processingFile} />);
     expect(screen.getByText(/processing/i, { exact: false })).toBeInTheDocument();
     
-    const pendingFile: File = { 
+    const pendingFile: MockFile = { 
       ...mockFile, 
       metadata: { ...mockFile.metadata, status: 'pending' } 
     };
     rerender(<FilePreview file={pendingFile} />);
     expect(screen.getByText(/pending/i, { exact: false })).toBeInTheDocument();
     
-    const errorFile: File = { 
+    const errorFile: MockFile = { 
       ...mockFile, 
       metadata: { ...mockFile.metadata, status: 'error' } 
     };
@@ -122,7 +135,7 @@ describe('FilePreview Component', () => {
   });
 
   it('displays file metadata when available', () => {
-    const fileWithMetadata: File = { 
+    const fileWithMetadata: MockFile = { 
       ...mockFile, 
       metadata: { 
         pages: 15, 
