@@ -19,13 +19,18 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   try {
+    const headers: Record<string, string> = {
+      "Accept": "application/json"
+    };
+    
+    if (data && !(data instanceof FormData)) {
+      headers["Content-Type"] = "application/json";
+    }
+    
     const res = await fetch(url, {
       method,
-      headers: data ? { 
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-      } : {},
-      body: data ? JSON.stringify(data) : undefined,
+      headers,
+      body: data instanceof FormData ? data : data ? JSON.stringify(data) : undefined,
       credentials: "include",
     });
 
