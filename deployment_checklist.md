@@ -1,87 +1,95 @@
-# Deployment Checklist
+# RAG Drive FTP Hub Deployment Checklist
 
-## Pre-Deployment Verification
-- [ ] All unit tests pass (`npm test`)
-- [ ] Code coverage meets the 80% minimum threshold
-- [ ] Frontend builds without errors (`npm run build`)
-- [ ] Backend compiles without TypeScript errors
-- [ ] Database schema is up to date
+This document provides a comprehensive checklist for deploying the RAG Drive FTP Hub application to production environments.
+
+## Pre-Deployment Checks
+
+- [ ] All tests are passing with at least 80% code coverage
+- [ ] All linting and code quality checks pass
+- [ ] Database schema is up-to-date with the latest migrations
 - [ ] Environment variables are properly configured
-- [ ] Dependencies are up to date and secure (no critical vulnerabilities)
+- [ ] Security scans have been performed and no vulnerabilities found
+- [ ] Performance testing has been completed
+- [ ] Documentation is up-to-date
 
-## Application Functionality Checklist
-- [ ] User authentication works properly
-  - [ ] Registration
-  - [ ] Login
-  - [ ] Session management
-- [ ] File management features
-  - [ ] File upload
-  - [ ] File preview
-  - [ ] File organization
-- [ ] Data source connectivity
-  - [ ] SQL connections
-  - [ ] API connections 
-  - [ ] Cloud storage connections
-  - [ ] FTP functionality
-- [ ] Pipeline functionality
-  - [ ] Pipeline creation
-  - [ ] Node connections
-  - [ ] Data transformations
-  - [ ] Pipeline execution
-- [ ] AI features
-  - [ ] Document analysis
-  - [ ] RAG implementations
-  - [ ] Transformation suggestions
-- [ ] Analytics dashboard
-  - [ ] Usage metrics
-  - [ ] Performance metrics
+## Environment Setup
 
-## Performance Verification
-- [ ] Application loads in under 3 seconds
-- [ ] API responses complete within 1 second
-- [ ] File uploads handle 100MB+ files
-- [ ] System maintains responsiveness under simulated load
-- [ ] Memory usage remains stable during extended use
+- [ ] Node.js v20 or later is installed
+- [ ] PostgreSQL 15 or later is configured and accessible
+- [ ] Docker and docker-compose are installed (for containerized deployment)
+- [ ] Network ports 5000 (application) and 21 (FTP) are open
+- [ ] SSL certificates are valid and installed
+- [ ] Firewall rules are configured properly
+- [ ] DNS records are updated
 
-## Security Verification
-- [ ] Authentication protects all required routes
-- [ ] Input validation is implemented for all user inputs
-- [ ] File uploads are properly validated and sanitized
-- [ ] Database queries use parameterized statements
-- [ ] API rate limiting is in place
-- [ ] No sensitive information is exposed in client-side code
-- [ ] HTTPS is properly configured
+## Required Environment Variables
 
-## Deployment Procedure
-- [ ] Database backup before deployment
-- [ ] Frontend assets built and optimized
-- [ ] Backend compiled and bundled
-- [ ] Configuration files updated for production
-- [ ] Environment variables set in production environment
-- [ ] Deploy to staging environment first
-- [ ] Verify functionality in staging
-- [ ] Deploy to production
-- [ ] Run smoke tests in production
+- [ ] `DATABASE_URL`: PostgreSQL connection string
+- [ ] `OPENAI_API_KEY`: OpenAI API key for AI features
+- [ ] `NODE_ENV`: Set to `production` for production deployments
+- [ ] `PORT`: Application port (default: 5000)
+- [ ] `SESSION_SECRET`: Secret for session encryption
+- [ ] `SLACK_WEBHOOK_URL`: (Optional) For deployment notifications
+
+## Deployment Process
+
+1. [ ] Run the deployment readiness script: `./scripts/deployment-readiness.sh`
+2. [ ] Backup the database: `./scripts/db-backup.sh pre_deploy`
+3. [ ] Build the application: `npm run build`
+4. [ ] Deploy using the automated script: `./scripts/deploy.sh`
+5. [ ] Verify application is accessible and functioning correctly
 
 ## Post-Deployment Verification
-- [ ] Application health check passes
-- [ ] All key user flows work in production
-- [ ] Logging is properly configured
-- [ ] Error monitoring is active
-- [ ] Analytics tracking is functioning
-- [ ] Third-party integrations are working
-- [ ] Backup procedures are in place
 
-## Rollback Plan
-- [ ] Previous version is available for immediate restoration
-- [ ] Database rollback procedure is documented
-- [ ] Team members understand the rollback process
-- [ ] Emergency contacts are up to date
-- [ ] Service level agreements are understood
+- [ ] User authentication works correctly
+- [ ] File uploads and downloads function properly
+- [ ] Data sources can be connected and accessed
+- [ ] Pipeline builder is operational
+- [ ] FTP connections can be established
+- [ ] Analytics dashboard displays correct data
+- [ ] All API endpoints return expected responses
+- [ ] Error logging and monitoring is functioning
 
-## Documentation
-- [ ] API documentation is updated
-- [ ] User documentation is current
-- [ ] Deployment process is documented
-- [ ] Configuration options are documented
-- [ ] Troubleshooting guides are available
+## Rollback Procedure
+
+If deployment fails or critical issues are found:
+
+1. [ ] Stop the application: `./scripts/restart.sh` or `docker-compose down`
+2. [ ] Restore the database: `./scripts/db-restore.sh <backup_file>`
+3. [ ] Redeploy the previous version or use the rollback feature in your CI/CD tool
+4. [ ] Verify the rollback was successful
+
+## Monitoring and Maintenance
+
+- [ ] Set up server monitoring (CPU, memory, disk usage)
+- [ ] Configure application performance monitoring
+- [ ] Set up error alerting and notification
+- [ ] Schedule regular database backups with `./scripts/db-backup.sh`
+- [ ] Schedule regular security updates and patches
+
+## Troubleshooting
+
+Common issues and their solutions:
+
+### Database Connection Issues
+- Check the `DATABASE_URL` environment variable
+- Verify database server is running and accessible
+- Check network configuration and firewall rules
+
+### Application Not Starting
+- Check the application logs in `./logs/`
+- Verify all dependencies are installed
+- Ensure there are no port conflicts
+
+### Authentication Problems
+- Check session configuration
+- Verify database tables for users are intact
+- Check for environment configuration issues
+
+## Support and Contact
+
+For additional assistance with deployment issues, contact:
+- Developer Team: [dev-team@example.com](mailto:dev-team@example.com)
+- DevOps Support: [devops@example.com](mailto:devops@example.com)
+
+*Last updated: March 2, 2025*
