@@ -56,6 +56,7 @@ export function FileUpload() {
   const [uploadError, setUploadError] = useState<UploadError | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [processingFile, setProcessingFile] = useState(false);
+  const [enableRagProcessing, setEnableRagProcessing] = useState(true);
   const [uploadedFile, setUploadedFile] = useState<UploadResult | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   
@@ -130,6 +131,7 @@ export function FileUpload() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("transferType", useFtp ? "ftp" : "local");
+      formData.append("enableRag", enableRagProcessing ? "true" : "false");
       
       if (useFtp) {
         formData.append("ftpConfig", JSON.stringify({
@@ -356,18 +358,33 @@ export function FileUpload() {
         </Alert>
       )}
 
-      <div className="flex justify-between items-center">
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="use-ftp"
-            checked={useFtp}
-            onCheckedChange={setUseFtp}
-            disabled={uploadMutation.isPending || processingFile}
-          />
-          <Label htmlFor="use-ftp" className="flex items-center">
-            <Server className="w-4 h-4 mr-1" />
-            Use FTP Transfer
-          </Label>
+      <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+        <div className="flex flex-col gap-2 w-full md:w-auto">
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="use-ftp"
+              checked={useFtp}
+              onCheckedChange={setUseFtp}
+              disabled={uploadMutation.isPending || processingFile}
+            />
+            <Label htmlFor="use-ftp" className="flex items-center">
+              <Server className="w-4 h-4 mr-1" />
+              Use FTP Transfer
+            </Label>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="enable-rag"
+              checked={enableRagProcessing}
+              onCheckedChange={setEnableRagProcessing}
+              disabled={uploadMutation.isPending || processingFile}
+            />
+            <Label htmlFor="enable-rag" className="flex items-center">
+              <FileCheck className="w-4 h-4 mr-1" />
+              Enable RAG Processing
+            </Label>
+          </div>
         </div>
         {useFtp && (
           <Dialog>
