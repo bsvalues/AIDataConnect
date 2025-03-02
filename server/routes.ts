@@ -227,6 +227,10 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
       const transferType = req.body.transferType || "local";
       let ftpConfig = null;
 
+      // Parse enableRag option
+      const enableRag = req.body.enableRag === "true";
+      logger.info(`File upload with RAG processing: ${enableRag ? 'enabled' : 'disabled'}`);
+
       if (transferType === "ftp" && req.body.ftpConfig) {
         try {
           ftpConfig = JSON.parse(req.body.ftpConfig);
@@ -244,7 +248,11 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
         size: req.file.size,
         path: req.file.path,
         userId: req.session.userId,
-        metadata: null,
+        metadata: {
+          ragEnabled: enableRag,
+          uploadedAt: new Date().toISOString(),
+          processed: false
+        },
         aiSummary: null,
         category: null,
         transferType,
@@ -272,11 +280,61 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
         }
       }
 
+      // Perform basic file analysis
       const analysis = await analyzeFile(content);
       fileData.aiSummary = analysis.summary;
       fileData.category = analysis.category;
 
+      // Save the file record to the database
       const savedFile = await storage.createFile(fileData);
+
+      // Process RAG embeddings if enabled
+      if (enableRag) {
+        try {
+          // Process the document in the background
+          // This is done asynchronously so we don't block the response
+          (async () => {
+            try {
+              const embeddings = await processDocumentForRag(content);
+              
+              for (const embedding of embeddings) {
+                await storage.createEmbedding({
+                  fileId: savedFile.id,
+                  chunk: embedding.text,
+                  vector: JSON.stringify(embedding.vector)
+                });
+              }
+              
+              // Update file metadata to indicate RAG processing is complete
+              await storage.updateFile(savedFile.id, {
+                metadata: {
+                  ...savedFile.metadata,
+                  processed: true,
+                  processedAt: new Date().toISOString(),
+                  embeddingCount: embeddings.length
+                }
+              });
+              
+              logger.info(`RAG processing completed for file ${savedFile.id} with ${embeddings.length} embeddings`);
+            } catch (ragError) {
+              logger.error(`RAG processing failed for file ${savedFile.id}:`, ragError);
+              // Still update the metadata to indicate processing failed
+              await storage.updateFile(savedFile.id, {
+                metadata: {
+                  ...savedFile.metadata,
+                  processed: true,
+                  processingError: true,
+                  errorMessage: ragError instanceof Error ? ragError.message : 'Unknown error'
+                }
+              });
+            }
+          })();
+        } catch (ragError) {
+          logger.error(`Error starting RAG processing for file ${savedFile.id}:`, ragError);
+          // We don't reject the upload if RAG fails to start
+        }
+      }
+
       res.json(savedFile);
     } catch (error) {
       console.error('File upload error:', error);
@@ -336,6 +394,54 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
       await storage.deleteFile(fileId);
       res.status(204).end();
     } catch (error) {
+      res.status(500).json({ message: handleError(error) });
+    }
+  });
+  
+  app.post("/api/files/:id/analyze", isAuthenticated, async (req, res) => {
+    try {
+      const fileId = parseInt(req.params.id);
+      const file = await storage.getFile(fileId);
+      
+      if (!file) {
+        return res.status(404).json({ message: "File not found" });
+      }
+      
+      // Ensure the file belongs to the authenticated user
+      if (file.userId !== req.session.userId) {
+        return res.status(403).json({ message: "You don't have permission to analyze this file" });
+      }
+      
+      let content: string;
+      try {
+        content = await fs.readFile(file.path, 'utf-8');
+      } catch (error) {
+        return res.status(400).json({ message: "Error reading file content" });
+      }
+      
+      // Perform AI analysis of the file content
+      const analysis = await analyzeFile(content);
+      
+      // Update file metadata with analysis results
+      const updatedFile = await storage.updateFile(fileId, {
+        aiSummary: analysis.summary,
+        category: analysis.category,
+        metadata: {
+          ...file.metadata,
+          analyzed: true,
+          analyzedAt: new Date().toISOString(),
+          keyInsights: analysis.keyInsights || [],
+          sentiment: analysis.sentiment || "neutral"
+        }
+      });
+      
+      res.status(200).json({
+        success: true,
+        message: "File analysis completed successfully",
+        file: updatedFile
+      });
+    } catch (error) {
+      console.error("Error analyzing file:", error);
       res.status(500).json({ message: handleError(error) });
     }
   });

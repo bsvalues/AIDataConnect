@@ -171,13 +171,22 @@ export async function analyzeRagPerformance(
 export async function analyzeFile(content: string): Promise<{
   summary: string;
   category: string;
+  keyInsights?: string[];
+  sentiment?: string;
 }> {
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
       {
         role: "system",
-        content: "Analyze the file content and provide a summary and category. Respond with JSON in this format: { 'summary': string, 'category': string }"
+        content: `Analyze the file content and provide a summary, category, key insights, and sentiment.
+        Respond with JSON in this format: 
+        { 
+          'summary': string, 
+          'category': string,
+          'keyInsights': string[],
+          'sentiment': string (one of: 'positive', 'negative', 'neutral', 'mixed')
+        }`
       },
       {
         role: "user",
