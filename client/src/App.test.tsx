@@ -93,7 +93,7 @@ describe('App Component', () => {
     renderApp();
     
     // For the initial auth check
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: false,
       status: 401,
     });

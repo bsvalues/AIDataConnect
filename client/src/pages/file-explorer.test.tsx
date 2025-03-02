@@ -55,7 +55,7 @@ describe('FileExplorer Page', () => {
 
   it('displays files when data is available', async () => {
     // Mock successful files fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([
         { 
@@ -95,7 +95,7 @@ describe('FileExplorer Page', () => {
 
   it('handles empty files list', async () => {
     // Mock empty files response
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([]),
     });
@@ -109,7 +109,7 @@ describe('FileExplorer Page', () => {
 
   it('displays error message when files fetch fails', async () => {
     // Mock failed files fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: false,
       status: 500,
       json: () => Promise.resolve({ message: 'Failed to fetch files' }),
@@ -124,7 +124,7 @@ describe('FileExplorer Page', () => {
 
   it('shows file details when file is selected', async () => {
     // Mock successful files fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([
         { 
@@ -171,7 +171,7 @@ describe('FileExplorer Page', () => {
 
   it('allows file deletion', async () => {
     // Mock successful files fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([
         { 
@@ -190,13 +190,13 @@ describe('FileExplorer Page', () => {
     });
     
     // Mock successful file deletion
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ success: true }),
     });
     
     // Mock successful files refresh after deletion
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([]),
     });
