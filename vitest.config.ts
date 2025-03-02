@@ -22,7 +22,7 @@ export default defineConfig({
         '**/*.config.{ts,js}',
       ],
     },
-    include: ['client/src/**/*.test.{ts,tsx}'],
+    include: ['client/src/**/*.test.{ts,tsx}', 'server/**/*.test.{ts,tsx}'],
     exclude: ['node_modules', 'dist'],
     testTimeout: 10000,
   },
