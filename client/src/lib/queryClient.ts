@@ -1,98 +1,266 @@
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { QueryClient, QueryFunction, DefaultOptions } from "@tanstack/react-query";
 
-async function throwIfResNotOk(res: Response) {
-  if (!res.ok) {
-    let errorMessage: string;
-    try {
-      const errorData = await res.json();
-      errorMessage = errorData.message || res.statusText;
-    } catch {
-      errorMessage = await res.text() || res.statusText;
+// Custom error class for API errors with additional context
+export class ApiError extends Error {
+  status: number;
+  data?: any;
+  
+  constructor(status: number, message: string, data?: any) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.data = data;
+    
+    // Maintains proper stack trace for where our error was thrown
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, ApiError);
     }
-    throw new Error(`${res.status}: ${errorMessage}`);
   }
 }
 
-export async function apiRequest(
+/**
+ * Handles error responses by extracting the error message and throwing an ApiError
+ * @param res Response object to process
+ * @throws ApiError with status code and error message
+ */
+async function handleResponseError(res: Response): Promise<never> {
+  let errorMessage: string;
+  let errorData: any = undefined;
+  
+  try {
+    errorData = await res.json();
+    errorMessage = errorData.message || errorData.error || res.statusText;
+  } catch {
+    try {
+      errorMessage = await res.text() || res.statusText;
+    } catch {
+      errorMessage = res.statusText || `HTTP Error ${res.status}`;
+    }
+  }
+  
+  throw new ApiError(res.status, errorMessage, errorData);
+}
+
+/**
+ * Creates a controller and signal with timeout for fetch requests
+ * @param timeoutMs Timeout in milliseconds (default: 30000ms)
+ */
+function createFetchSignal(timeoutMs = 30000): { 
+  controller: AbortController; 
+  signal: AbortSignal;
+  timerId: NodeJS.Timeout;
+} {
+  const controller = new AbortController();
+  const signal = controller.signal;
+  const timerId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  return { controller, signal, timerId };
+}
+
+/**
+ * Makes API requests with proper error handling, timeouts, and FormData support
+ * @param method HTTP method
+ * @param url Request URL
+ * @param options Request options
+ */
+export async function apiRequest<T = any>(
   method: string,
   url: string,
-  data?: unknown | undefined,
-): Promise<Response> {
+  options: {
+    data?: unknown;
+    headers?: Record<string, string>;
+    timeoutMs?: number;
+    parseJson?: boolean;
+  } = {}
+): Promise<T> {
+  const { 
+    data,
+    headers: customHeaders = {}, 
+    timeoutMs = 30000,
+    parseJson = true
+  } = options;
+  
+  const { signal, timerId } = createFetchSignal(timeoutMs);
+  
   try {
     const headers: Record<string, string> = {
-      "Accept": "application/json"
+      "Accept": "application/json",
+      ...customHeaders
     };
     
+    // Only set Content-Type for non-FormData requests
     if (data && !(data instanceof FormData)) {
       headers["Content-Type"] = "application/json";
     }
     
+    const requestBody = data instanceof FormData 
+      ? data 
+      : data 
+        ? JSON.stringify(data) 
+        : undefined;
+    
     const res = await fetch(url, {
       method,
       headers,
-      body: data instanceof FormData ? data : data ? JSON.stringify(data) : undefined,
+      body: requestBody,
       credentials: "include",
+      signal
     });
 
-    await throwIfResNotOk(res);
-    return res;
-  } catch (error) {
-    if (error instanceof Error) {
-      throw new Error(`API Request failed: ${error.message}`);
+    // Clear the timeout as we got a response
+    clearTimeout(timerId);
+
+    // Handle error responses
+    if (!res.ok) {
+      await handleResponseError(res);
     }
-    throw error;
+    
+    // Handle empty responses
+    if (res.status === 204 || res.headers.get('content-length') === '0') {
+      return {} as unknown as T;
+    }
+    
+    // Parse response based on content type
+    if (parseJson) {
+      const data = await res.json();
+      return data as T;
+    } else {
+      return res as unknown as T;
+    }
+  } catch (error) {
+    // Clean up timeout if there's an error
+    clearTimeout(timerId);
+    
+    // Handle abort errors
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiError(408, `Request timed out after ${timeoutMs}ms`);
+    }
+    
+    // Rethrow ApiErrors
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    
+    // Handle other errors
+    if (error instanceof Error) {
+      throw new ApiError(500, `API Request failed: ${error.message}`);
+    }
+    
+    // Fallback for unknown errors
+    throw new ApiError(500, 'Unknown API error occurred');
   }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
-export const getQueryFn: <T>(options: {
+
+/**
+ * Creates a query function for react-query with error handling and auth checks
+ */
+export function getQueryFn<T>(options: {
   on401: UnauthorizedBehavior;
-}) => QueryFunction<T> =
-  ({ on401: unauthorizedBehavior }) =>
-  async ({ queryKey }) => {
+  timeoutMs?: number;
+}): QueryFunction<T> {
+  const { on401: unauthorizedBehavior, timeoutMs = 30000 } = options;
+  
+  return async ({ queryKey }): Promise<T> => {
     try {
-      const res = await fetch(queryKey[0] as string, {
+      // Handle different types of queryKey safely
+      let url: string;
+      if (Array.isArray(queryKey) && queryKey.length > 0) {
+        const firstKey = queryKey[0];
+        if (typeof firstKey === 'string') {
+          url = firstKey;
+        } else {
+          throw new ApiError(400, 'Invalid query key format. First element must be a string URL.');
+        }
+      } else if (typeof queryKey === 'string') {
+        url = queryKey;
+      } else {
+        throw new ApiError(400, 'Invalid query key. Must be a string or array with string as first element.');
+      }
+      
+      const { signal, timerId } = createFetchSignal(timeoutMs);
+      
+      const res = await fetch(url, {
         credentials: "include",
         headers: {
           "Accept": "application/json"
-        }
+        },
+        signal
       });
+      
+      clearTimeout(timerId);
 
-      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-        return null;
+      // Handle unauthorized differently based on configured behavior
+      if (res.status === 401) {
+        if (unauthorizedBehavior === "returnNull") {
+          return null as unknown as T;
+        } else {
+          await handleResponseError(res);
+        }
       }
 
-      await throwIfResNotOk(res);
-      return await res.json();
+      if (!res.ok) {
+        await handleResponseError(res);
+      }
+      
+      // Handle empty responses
+      if (res.status === 204 || res.headers.get('content-length') === '0') {
+        return {} as unknown as T;
+      }
+      
+      const data = await res.json();
+      return data as T;
     } catch (error) {
-      if (error instanceof Error) {
-        throw new Error(`Query failed: ${error.message}`);
+      if (error instanceof ApiError) {
+        throw error;
       }
-      throw error;
+      
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new ApiError(408, `Query timed out after ${timeoutMs}ms`);
+      }
+      
+      if (error instanceof Error) {
+        throw new ApiError(500, `Query failed: ${error.message}`);
+      }
+      
+      throw new ApiError(500, 'Unknown query error occurred');
     }
   };
+}
 
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      queryFn: getQueryFn({ on401: "throw" }),
-      refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: (failureCount, error) => {
-        // Don't retry on 401/403 errors
-        if (error instanceof Error && error.message.startsWith('401:')) return false;
-        if (error instanceof Error && error.message.startsWith('403:')) return false;
-        return failureCount < 3;
-      },
-    },
-    mutations: {
-      retry: (failureCount, error) => {
-        // Don't retry on 401/403 errors
-        if (error instanceof Error && error.message.startsWith('401:')) return false;
-        if (error instanceof Error && error.message.startsWith('403:')) return false;
-        return failureCount < 2;
-      },
+// Default query client configuration
+const defaultQueryOptions: DefaultOptions = {
+  queries: {
+    queryFn: getQueryFn({ on401: "throw" }),
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    staleTime: 60000, // 1 minute
+    gcTime: 300000,  // 5 minutes
+    retry: (failureCount, error) => {
+      // Don't retry on auth errors
+      if (error instanceof ApiError && [401, 403, 404].includes(error.status)) {
+        return false;
+      }
+      
+      // Don't retry after 3 failures
+      return failureCount < 3;
     },
   },
+  mutations: {
+    retry: (failureCount, error) => {
+      // Don't retry on auth errors
+      if (error instanceof ApiError && [401, 403, 404].includes(error.status)) {
+        return false;
+      }
+      
+      // Only retry once for mutations
+      return failureCount < 1;
+    },
+  },
+};
+
+// Export the global query client
+export const queryClient = new QueryClient({
+  defaultOptions: defaultQueryOptions,
 });
