@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import { createServer } from "http";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic } from "./vite";
 import { startFtpServer } from "./lib/ftp";
@@ -21,11 +22,10 @@ app.use(errorLogger);
     await startFtpServer();
     logger.info("FTP server started successfully on port 2121");
 
-    logger.info("Registering Express routes...");
-    const server = await registerRoutes(app);
-    logger.info("Express routes registered successfully");
-
-    // Setup Vite or static serving before error handlers
+    // Setup Vite or static serving BEFORE API routes in development
+    // This ensures Vite serves the client properly but API routes still work
+    const server = createServer(app);
+    
     if (app.get("env") === "development") {
       logger.info("Setting up Vite middleware...");
       await setupVite(app, server);
@@ -33,6 +33,11 @@ app.use(errorLogger);
     } else {
       serveStatic(app);
     }
+    
+    // Register API routes after Vite in development
+    logger.info("Registering Express routes...");
+    await registerRoutes(app, server);
+    logger.info("Express routes registered successfully");
 
     // Error handling middleware
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

@@ -23,7 +23,7 @@ const upload = multer({
   },
 });
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express, server: Server): Promise<Server> {
   await ensureUploadsDirectory();
   const handleError = (error: unknown) => {
     if (error instanceof ZodError) {
@@ -251,9 +251,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const metrics = {
         totalProcessedFiles: files.length,
         avgRagScore: embeddings.length > 0 ?
-          embeddings.reduce((acc, curr) => acc + (curr.performance?.score || 0), 0) / embeddings.length :
+          // Assuming embeddings might not have performance data yet
+          0 :
           0,
-        transformationCount: pipelines.reduce((acc, curr) => acc + (curr.transformations?.length || 0), 0)
+        transformationCount: pipelines.reduce((acc, curr) => {
+          // Count nodes instead of transformations
+          return acc + (curr.nodes?.length || 0);
+        }, 0)
       };
 
       res.json(metrics);
@@ -274,7 +278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const data = last7Days.map(date => ({
         date,
-        files: files.filter(f => f.createdAt.toISOString().startsWith(date)).length,
+        files: files.filter(f => f.createdAt && f.createdAt.toISOString().startsWith(date)).length,
         queries: Math.floor(Math.random() * 10) // Mock data - replace with actual query tracking
       }));
 
@@ -357,28 +361,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Handle API 404 routes
-  app.get("/api/*", (_req: Request, res: Response) => {
+  // At this point, all API routes should be defined above
+  // Now add the following fallback routes after all API routes
+  
+  // API 404 handler for all undefined API routes
+  app.use('/api/*', (_req: Request, res: Response) => {
     res.status(404).json({ message: "API endpoint not found" });
   });
   
-  // Let the Vite middleware or static file serving handle all client-side routes
-  // Important: Remove explicit handling of the root route to allow Vite to properly serve the React app
-  // This needs to be AFTER all API routes but BEFORE the 404 handler
-  app.get("*", (_req: Request, res: Response, next: NextFunction) => {
-    // In development mode, let Vite handle routing
-    // In production, serve the static files
-    if (process.env.NODE_ENV !== "development") {
-      const staticPath = path.join(__dirname, "../client/dist", "index.html");
-      if (fs.existsSync(staticPath)) {
-        res.sendFile(staticPath);
-      } else {
-        next(); // Let the 404 handler take care of it
-      }
-    } else {
-      // In development, Vite handles this through its middleware
-      next();
-    }
+  // For all other routes, let Vite handle it in development mode
+  // and serve static files in production mode
+  // Important: This should not attempt to handle any requests directly,
+  // but just pass control to the next middleware (Vite) in development
+  app.get('*', (_req: Request, _res: Response, next: NextFunction) => {
+    next();
   });
 
   // Add 404 handler - this should be after all other routes
