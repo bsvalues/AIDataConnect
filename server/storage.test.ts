@@ -4,7 +4,8 @@ import type {
   InsertFile, 
   InsertDataSource, 
   InsertEmbedding, 
-  InsertPipeline
+  InsertPipeline,
+  User
 } from '@shared/schema';
 
 // Import the schemas directly from shared/schema.ts
@@ -15,6 +16,12 @@ import {
   ftpConfigSchema
 } from '@shared/schema';
 
+// Define test type for user
+type InsertUserTest = {
+  username: string;
+  password: string;
+};
+
 describe('MemStorage', () => {
   let storage: MemStorage;
 
@@ -24,7 +31,7 @@ describe('MemStorage', () => {
 
   describe('User Operations', () => {
     it('creates and retrieves a user', async () => {
-      const insertUser = {
+      const insertUser: InsertUserTest = {
         username: 'testuser',
         password: 'password123'
       };
@@ -38,7 +45,7 @@ describe('MemStorage', () => {
     });
 
     it('finds user by username', async () => {
-      const insertUser = {
+      const insertUser: InsertUserTest = {
         username: 'testuser',
         password: 'password123'
       };
@@ -51,14 +58,13 @@ describe('MemStorage', () => {
 
   describe('File Operations', () => {
     it('creates and retrieves a file', async () => {
-      const insertFile: InsertFile = {
+      const insertFile = {
         name: 'test-file.txt',
         type: 'text/plain',
         size: 1024,
         path: '/uploads/test-file.txt',
         userId: 1,
-        transferType: 'local',
-        ftpConfig: null,
+        transferType: 'local' as const,
         metadata: null,
         aiSummary: null,
         category: null
@@ -74,14 +80,13 @@ describe('MemStorage', () => {
 
     it('lists files by user', async () => {
       const userId = 1;
-      const insertFile: InsertFile = {
+      const insertFile = {
         name: 'test-file.txt',
         type: 'text/plain',
         size: 1024,
         path: '/uploads/test-file.txt',
         userId,
-        transferType: 'local',
-        ftpConfig: null,
+        transferType: 'local' as const,
         metadata: null,
         aiSummary: null,
         category: null
@@ -95,14 +100,13 @@ describe('MemStorage', () => {
     });
 
     it('updates a file', async () => {
-      const insertFile: InsertFile = {
+      const insertFile = {
         name: 'test-file.txt',
         type: 'text/plain',
         size: 1024,
         path: '/uploads/test-file.txt',
         userId: 1,
-        transferType: 'local',
-        ftpConfig: null,
+        transferType: 'local' as const,
         metadata: null,
         aiSummary: null,
         category: null
@@ -122,14 +126,13 @@ describe('MemStorage', () => {
     });
 
     it('deletes a file', async () => {
-      const insertFile: InsertFile = {
+      const insertFile = {
         name: 'test-file.txt',
         type: 'text/plain',
         size: 1024,
         path: '/uploads/test-file.txt',
         userId: 1,
-        transferType: 'local',
-        ftpConfig: null,
+        transferType: 'local' as const,
         metadata: null,
         aiSummary: null,
         category: null
@@ -140,6 +143,37 @@ describe('MemStorage', () => {
       
       const retrieved = await storage.getFile(file.id);
       expect(retrieved).toBeUndefined();
+    });
+    
+    it('creates a file with FTP configuration', async () => {
+      const insertFile = {
+        name: 'ftp-file.txt',
+        type: 'text/plain',
+        size: 2048,
+        path: '/uploads/ftp-file.txt',
+        userId: 1,
+        transferType: 'ftp' as const,
+        metadata: null,
+        aiSummary: null,
+        category: null,
+        ftpConfig: {
+          host: 'ftp.example.com',
+          port: 21,
+          user: 'ftpuser',
+          password: 'ftppass',
+          secure: true,
+          passive: true
+        }
+      };
+
+      const file = await storage.createFile(insertFile);
+      expect(file.id).toBe(1);
+      expect(file.name).toBe(insertFile.name);
+      expect(file.transferType).toBe('ftp');
+      expect(file.ftpConfig).toEqual(insertFile.ftpConfig);
+
+      const retrieved = await storage.getFile(file.id);
+      expect(retrieved).toEqual(file);
     });
   });
 
@@ -224,6 +258,149 @@ describe('MemStorage', () => {
       await storage.deleteDataSource(source.id);
       
       const retrieved = await storage.getDataSource(source.id);
+      expect(retrieved).toBeUndefined();
+    });
+  });
+
+  describe('Embedding Operations', () => {
+    it('creates and retrieves embeddings', async () => {
+      const insertEmbedding: InsertEmbedding = {
+        fileId: 1,
+        text: 'This is a test chunk for embedding',
+        vector: [0.1, 0.2, 0.3, 0.4, 0.5],
+        chunkIndex: 0
+      };
+
+      const embedding = await storage.createEmbedding(insertEmbedding);
+      expect(embedding.id).toBe(1);
+      expect(embedding.text).toBe(insertEmbedding.text);
+      
+      const embeddings = await storage.getAllEmbeddings();
+      expect(embeddings).toHaveLength(1);
+      expect(embeddings[0].id).toBe(embedding.id);
+    });
+
+    it('retrieves embeddings by file IDs', async () => {
+      const fileId1 = 1;
+      const fileId2 = 2;
+      
+      await storage.createEmbedding({
+        fileId: fileId1,
+        text: 'Chunk from file 1',
+        vector: [0.1, 0.2, 0.3],
+        chunkIndex: 0
+      });
+      
+      await storage.createEmbedding({
+        fileId: fileId2,
+        text: 'Chunk from file 2',
+        vector: [0.4, 0.5, 0.6],
+        chunkIndex: 0
+      });
+
+      await storage.createEmbedding({
+        fileId: fileId1,
+        text: 'Another chunk from file 1',
+        vector: [0.7, 0.8, 0.9],
+        chunkIndex: 1
+      });
+      
+      // Get embeddings for file 1
+      const file1Embeddings = await storage.getEmbeddingsByFileIds([fileId1]);
+      expect(file1Embeddings).toHaveLength(2);
+      expect(file1Embeddings.every(e => e.text.includes('file 1'))).toBe(true);
+      
+      // Get embeddings for both files
+      const allFileEmbeddings = await storage.getEmbeddingsByFileIds([fileId1, fileId2]);
+      expect(allFileEmbeddings).toHaveLength(3);
+    });
+  });
+
+  describe('Pipeline Operations', () => {
+    it('creates and retrieves a pipeline', async () => {
+      const insertPipeline: InsertPipeline = {
+        name: 'Test Pipeline',
+        userId: 1,
+        description: 'A test pipeline',
+        nodes: JSON.stringify([
+          { id: 'node1', type: 'source', position: { x: 100, y: 100 }, data: { label: 'Source' } }
+        ]),
+        edges: JSON.stringify([]),
+        isActive: true
+      };
+
+      const pipeline = await storage.createPipeline(insertPipeline);
+      expect(pipeline.id).toBe(1);
+      expect(pipeline.name).toBe(insertPipeline.name);
+
+      const retrieved = await storage.getPipeline(pipeline.id);
+      expect(retrieved).toEqual(pipeline);
+    });
+
+    it('lists pipelines by user', async () => {
+      const userId = 1;
+      
+      const insertPipeline: InsertPipeline = {
+        name: 'Pipeline 1',
+        userId,
+        description: 'First test pipeline',
+        nodes: JSON.stringify([{ id: 'node1', type: 'source', position: { x: 100, y: 100 }, data: { label: 'Source' } }]),
+        edges: JSON.stringify([]),
+        isActive: true
+      };
+
+      await storage.createPipeline(insertPipeline);
+      await storage.createPipeline({
+        ...insertPipeline,
+        name: 'Pipeline 2',
+        description: 'Second test pipeline'
+      });
+
+      const pipelines = await storage.getPipelinesByUser(userId);
+      expect(pipelines).toHaveLength(2);
+      expect(pipelines[0].name).toBe('Pipeline 1');
+      expect(pipelines[1].name).toBe('Pipeline 2');
+    });
+
+    it('updates a pipeline', async () => {
+      const insertPipeline: InsertPipeline = {
+        name: 'Original Pipeline',
+        userId: 1,
+        description: 'Original description',
+        nodes: JSON.stringify([{ id: 'node1', type: 'source', position: { x: 100, y: 100 }, data: { label: 'Source' } }]),
+        edges: JSON.stringify([]),
+        isActive: true
+      };
+
+      const pipeline = await storage.createPipeline(insertPipeline);
+      
+      const updates = {
+        name: 'Updated Pipeline',
+        description: 'Updated description',
+        isActive: false
+      };
+      
+      const updated = await storage.updatePipeline(pipeline.id, updates);
+      expect(updated.name).toBe(updates.name);
+      expect(updated.description).toBe(updates.description);
+      expect(updated.isActive).toBe(updates.isActive);
+      expect(updated.nodes).toBe(pipeline.nodes); // Unchanged field
+    });
+
+    it('deletes a pipeline', async () => {
+      const insertPipeline: InsertPipeline = {
+        name: 'Pipeline to Delete',
+        userId: 1,
+        description: 'This will be deleted',
+        nodes: JSON.stringify([]),
+        edges: JSON.stringify([]),
+        isActive: true
+      };
+
+      const pipeline = await storage.createPipeline(insertPipeline);
+      await storage.deletePipeline(pipeline.id);
+      
+      const retrieved = await storage.getPipeline(pipeline.id);
       expect(retrieved).toBeUndefined();
     });
   });
