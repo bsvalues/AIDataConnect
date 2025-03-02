@@ -54,7 +54,7 @@ describe('FileUpload Component', () => {
     global.FormData = vi.fn(() => formDataMock as any);
     
     // Mock successful file upload
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ id: 1, name: 'test-file.txt', success: true }),
     });
@@ -132,7 +132,7 @@ describe('FileUpload Component', () => {
     global.FormData = vi.fn(() => formDataMock as any);
     
     // Mock fetch to return error
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: false,
       status: 500,
       json: () => Promise.resolve({ message: 'Server error' }),

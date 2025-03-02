@@ -47,7 +47,7 @@ describe('DataSources Page', () => {
 
   it('displays the data sources list when data is available', async () => {
     // Mock successful data sources fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([
         { 
@@ -90,7 +90,7 @@ describe('DataSources Page', () => {
 
   it('handles empty data sources', async () => {
     // Mock empty data sources response
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([]),
     });

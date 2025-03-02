@@ -83,7 +83,7 @@ describe('TransformationSuggestions Component', () => {
 
   it('handles no suggestions case', async () => {
     // Mock empty suggestions response
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([]),
     });
@@ -97,7 +97,7 @@ describe('TransformationSuggestions Component', () => {
 
   it('displays error when suggestions fetch fails', async () => {
     // Mock failed suggestions fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: false,
       status: 500,
       json: () => Promise.resolve({ message: 'Failed to fetch suggestions' }),
@@ -112,7 +112,7 @@ describe('TransformationSuggestions Component', () => {
 
   it('calls onApply when a suggestion is applied', async () => {
     // Mock successful suggestions fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([
         {
@@ -141,7 +141,7 @@ describe('TransformationSuggestions Component', () => {
 
   it('shows transformation code preview when hovering over a suggestion', async () => {
     // Mock successful suggestions fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([
         {
