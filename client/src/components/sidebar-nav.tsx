@@ -26,7 +26,7 @@ const navItems = [
   },
   {
     title: "Data Pipelines",
-    href: "/pipelines",
+    href: "/pipeline",
     icon: GitGraph
   }
 ];
