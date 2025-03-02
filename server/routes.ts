@@ -1,5 +1,5 @@
 import type { Express, Request, Response, NextFunction } from "express";
-import { createServer, type Server } from "http";
+import type { Server } from "http";
 import multer from "multer";
 import { storage } from "./storage-manager";
 import { analyzeFile, searchFiles, suggestTransformations, processDocumentForRag, findSimilarChunks, generateRagResponse, analyzeRagPerformance } from "./lib/openai";
@@ -459,8 +459,8 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
     });
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
+  // Return the server that was passed in
+  return server;
 }
 
 async function ensureUploadsDirectory() {
