@@ -80,7 +80,7 @@ describe('Register Page', () => {
 
   it('handles successful registration', async () => {
     // Mock fetch to return successful registration
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ id: 1, username: 'newuser' }),
     });
@@ -106,7 +106,7 @@ describe('Register Page', () => {
 
   it('handles registration error', async () => {
     // Mock fetch to return error
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: false,
       status: 409,
       json: () => Promise.resolve({ message: 'Username already exists' }),

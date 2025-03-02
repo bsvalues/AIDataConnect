@@ -53,7 +53,7 @@ describe('TransformationSuggestions Component', () => {
 
   it('fetches suggestions from the API', async () => {
     // Mock successful suggestions fetch
-    (global.fetch as jest.Mock).mockResolvedValueOnce({
+    (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve([
         {

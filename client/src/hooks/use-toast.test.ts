@@ -44,17 +44,17 @@ describe('useToast Hook', () => {
   it('should update a toast', () => {
     const { result } = renderHook(() => useToast());
     
-    let toastId: string;
+    let toastId: string = '';
     
     act(() => {
-      toastId = result.current.toast({
+      const toast = result.current.toast({
         title: 'Initial Toast',
         description: 'This is an initial toast',
-      }).id;
-    });
-    
-    act(() => {
-      result.current.update({
+      });
+      toastId = toast.id;
+      
+      // Use toast's update method directly
+      toast.update({
         id: toastId,
         title: 'Updated Toast',
         description: 'This toast has been updated',
@@ -70,7 +70,7 @@ describe('useToast Hook', () => {
   it('should dismiss a toast by id', () => {
     const { result } = renderHook(() => useToast());
     
-    let toastId: string;
+    let toastId: string = '';
     
     act(() => {
       toastId = result.current.toast({
@@ -118,9 +118,17 @@ describe('useToast Hook', () => {
   });
 
   it('should handle the reducer correctly', () => {
+    // Import the action types from the source
+    const actionTypes = {
+      ADD_TOAST: "ADD_TOAST",
+      UPDATE_TOAST: "UPDATE_TOAST",
+      DISMISS_TOAST: "DISMISS_TOAST",
+      REMOVE_TOAST: "REMOVE_TOAST",
+    } as const;
+  
     // Test ADD action
     const addAction = {
-      type: 'ADD_TOAST',
+      type: actionTypes.ADD_TOAST,
       toast: { id: '1', title: 'Add Toast' },
     };
     
@@ -130,7 +138,7 @@ describe('useToast Hook', () => {
     
     // Test UPDATE action
     const updateAction = {
-      type: 'UPDATE_TOAST',
+      type: actionTypes.UPDATE_TOAST,
       toast: { id: '1', title: 'Updated Toast' },
     };
     
@@ -140,7 +148,7 @@ describe('useToast Hook', () => {
     
     // Test DISMISS action
     const dismissAction = {
-      type: 'DISMISS_TOAST',
+      type: actionTypes.DISMISS_TOAST,
       toastId: '1',
     };
     
