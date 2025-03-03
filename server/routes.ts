@@ -94,12 +94,7 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
   // Ensure test user exists
   await ensureDefaultUser();
   
-  // Add a test protected route for authentication testing
-  app.get("/api/auth/protected", isAuthenticated, (_req: Request, res: Response) => {
-    res.json({ message: "This is a protected route" });
-  });
-  
-  // Set up session middleware
+  // Set up session middleware BEFORE route handlers
   app.use(session({
     secret: process.env.SESSION_SECRET || 'rag-drive-secret',
     resave: false,
@@ -112,6 +107,11 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
       checkPeriod: 86400000 // prune expired entries every 24h
     })
   }));
+  
+  // Add a test protected route for authentication testing
+  app.get("/api/auth/protected", isAuthenticated, (_req: Request, res: Response) => {
+    res.json({ message: "This is a protected route" });
+  });
   
   const handleError = (error: unknown) => {
     if (error instanceof ZodError) {
