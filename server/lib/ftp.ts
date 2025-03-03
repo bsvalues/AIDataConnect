@@ -23,13 +23,26 @@ function createFtpServer(port: number): FtpServer {
 }
 
 // Start FTP server
-export async function startFtpServer(): Promise<FtpServer> {
+export async function startFtpServer(): Promise<FtpServer | null> {
+  // Check if FTP server is disabled
+  if (process.env.ENABLE_FTP_SERVER === 'false') {
+    console.log("FTP server is disabled by configuration");
+    return null;
+  }
+
   try {
     // Check for required environment variables
     console.log("Checking FTP environment variables...");
-    if (!process.env.FTP_USER || !process.env.FTP_PASS) {
-      throw new Error("FTP_USER and FTP_PASS environment variables are required");
-    }
+    
+    // Set default FTP credentials if not provided
+    const ftpUser = process.env.FTP_USER || 'ftpuser';
+    const ftpPass = process.env.FTP_PASS || process.env.FTP_PASSWORD || 'password';
+
+    // Set to environment for future use
+    process.env.FTP_USER = ftpUser;
+    process.env.FTP_PASS = ftpPass;
+    
+    console.log(`Using FTP credentials: user=${ftpUser}`);
 
     for (const port of tryPorts) {
       try {
@@ -38,9 +51,10 @@ export async function startFtpServer(): Promise<FtpServer> {
 
         // Handle FTP authentication
         ftpServer.on("login", async ({ username, password }, resolve, reject) => {
-          console.log(`Login attempt for user: ${username}`);
           try {
-            if (username === process.env.FTP_USER && password === process.env.FTP_PASS) {
+            console.log(`Login attempt for user: ${username}`);
+            
+            if (username === ftpUser && password === ftpPass) {
               const uploadsDir = await ensureUploadsDirectory();
               console.log("Login successful, resolving with uploads directory");
               resolve({ root: uploadsDir });
@@ -54,30 +68,55 @@ export async function startFtpServer(): Promise<FtpServer> {
           }
         });
 
+        // Handle client errors
         ftpServer.on("client-error", ({ connection, context, error }) => {
+          // Just log the error without crashing
           console.error(`FTP client error [${context}]:`, error);
         });
+        
+        // Add event listeners for connection and disconnection
+        ftpServer.on("disconnect", ({ connection, id }) => {
+          console.log(`FTP client disconnected: ${id}`);
+        });
 
-        await ftpServer.listen();
-        console.log(`FTP Server is running on port ${port}`);
-        return ftpServer;
+        try {
+          await ftpServer.listen();
+          console.log(`FTP Server is running on port ${port}`);
+          return ftpServer;
+        } catch (listenError: any) {
+          console.error(`Error during FTP server listen on port ${port}:`, listenError);
+          if (listenError?.code === 'EADDRINUSE') {
+            console.log(`Port ${port} is in use, trying next port...`);
+            continue;
+          }
+          throw listenError;
+        }
       } catch (error: any) {
+        console.error(`FTP server setup error on port ${port}:`, error);
+        
         if (error?.code === 'EADDRINUSE') {
           console.log(`Port ${port} is in use, trying next port...`);
           if (port === tryPorts[tryPorts.length - 1]) {
             console.warn("All FTP ports in use, skipping FTP server startup");
-            return ftpServer;
+            return null;
           }
           continue;
         }
-        console.error("Error starting FTP server:", error);
-        throw error;
+        
+        // For other errors, try next port
+        if (port === tryPorts[tryPorts.length - 1]) {
+          console.warn("Failed to start FTP server on all ports, continuing without FTP");
+          return null;
+        }
       }
     }
-    return ftpServer;
+    
+    console.warn("No available ports for FTP server, continuing without FTP");
+    return null;
   } catch (error) {
     console.error("Failed to start FTP server:", error);
-    throw error;
+    // Continue without FTP server
+    return null;
   }
 }
 

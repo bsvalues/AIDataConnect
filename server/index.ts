@@ -17,10 +17,14 @@ app.use(errorLogger);
 
 (async () => {
   try {
-    // Start FTP server first
+    // Start FTP server first (but continue even if it fails)
     logger.info("Starting FTP server...");
-    await startFtpServer();
-    logger.info("FTP server started successfully on port 2121");
+    const ftpServer = await startFtpServer();
+    if (ftpServer) {
+      logger.info("FTP server started successfully");
+    } else {
+      logger.warn("FTP server not started - continuing without FTP functionality");
+    }
 
     // Create HTTP server
     const server = createServer(app);
