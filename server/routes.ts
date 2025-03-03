@@ -773,21 +773,21 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
     res.status(404).json({ message: "API endpoint not found" });
   });
   
-  // For all non-API routes, let Vite handle it in development mode
-  // and serve static files in production mode
-  // Important: This should not attempt to handle any requests directly,
-  // but just pass control to the next middleware (Vite) in development
-  app.get('*', (req: Request, res: Response, next: NextFunction) => {
-    // Make sure this doesn't interfere with API routes
-    if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ message: "API endpoint not found" });
-    }
-    next();
-  });
-
-  // Add 404 handler - this should be after all other routes
+  // IMPORTANT: Let Vite handle routing for all non-API routes
+  // This ensures client-side routing works properly for the SPA
+  // We should NOT add any other middleware that handles '*' routes after this
+  // as they would intercept before Vite can serve the frontend app
+  
+  // We'll keep this 404 handler ONLY for API routes that start with /api/
+  // and weren't matched by previous handlers
   app.use((req: Request, res: Response, next: NextFunction) => {
-    logger.error("404 Not Found", {
+    // Only handle API routes here, let Vite handle all other routes
+    if (!req.path.startsWith('/api/')) {
+      // Pass to next handler (which should be Vite)
+      return next();
+    }
+    
+    logger.error("API 404 Not Found", {
       metadata: {
         path: req.originalUrl,
         method: req.method,
@@ -796,55 +796,11 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
       }
     });
 
-    // If API request, return JSON
-    if (req.path.startsWith('/api/')) {
-      return res.status(404).json({
-        message: "API endpoint not found",
-        path: req.path
-      });
-    }
-
-    // For web requests, return the 404 page
-    res.status(404).send(`
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>404 - Page Not Found</title>
-        <style>
-          body {
-            font-family: system-ui, -apple-system, sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            background: #f9fafb;
-          }
-          .container {
-            text-align: center;
-            padding: 2rem;
-          }
-          h1 { color: #111827; margin-bottom: 1rem; }
-          p { color: #6b7280; margin-bottom: 2rem; }
-          a {
-            color: #2563eb;
-            text-decoration: none;
-            font-weight: 500;
-          }
-          a:hover { text-decoration: underline; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>404 Page Not Found</h1>
-          <p>The page you're looking for doesn't exist or has been moved.</p>
-          <a href="/">Return to Dashboard</a>
-        </div>
-      </body>
-      </html>
-    `);
+    // Only handle API 404s here
+    return res.status(404).json({
+      message: "API endpoint not found",
+      path: req.path
+    });
   });
 
   // Error handler should be the last middleware
