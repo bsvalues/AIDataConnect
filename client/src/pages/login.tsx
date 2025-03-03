@@ -2,7 +2,7 @@ import { z } from "zod";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest, ApiError } from "@/lib/queryClient";
+import { apiRequest, ApiError, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -112,11 +112,16 @@ export default function Login() {
         throw err;
       }
     },
-    onSuccess: () => {
+    onSuccess: (userData) => {
+      // Invalidate the auth query to update authentication state
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+      
       toast({
         title: "Login successful",
-        description: "Welcome to RAG Drive! You have been logged in successfully.",
+        description: `Welcome back, ${userData.username}! You have been logged in successfully.`,
       });
+      
+      // Redirect to dashboard
       setLocation("/");
     },
     onError: () => {
