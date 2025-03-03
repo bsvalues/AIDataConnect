@@ -2,7 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic } from "./vite";
-import { startFtpServer } from "./lib/ftp";
+// import { startFtpServer } from "./lib/ftp"; // Temporarily disable FTP
 import logger, { requestLogger, errorLogger } from "./lib/logger";
 
 const app = express();
@@ -17,14 +17,8 @@ app.use(errorLogger);
 
 (async () => {
   try {
-    // Start FTP server first (but continue even if it fails)
-    logger.info("Starting FTP server...");
-    const ftpServer = await startFtpServer();
-    if (ftpServer) {
-      logger.info("FTP server started successfully");
-    } else {
-      logger.warn("FTP server not started - continuing without FTP functionality");
-    }
+    // FTP server temporarily disabled for development
+    logger.info("FTP server disabled for development");
 
     // Create HTTP server
     const server = createServer(app);
