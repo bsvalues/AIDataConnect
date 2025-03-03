@@ -773,11 +773,15 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
     res.status(404).json({ message: "API endpoint not found" });
   });
   
-  // For all other routes, let Vite handle it in development mode
+  // For all non-API routes, let Vite handle it in development mode
   // and serve static files in production mode
   // Important: This should not attempt to handle any requests directly,
   // but just pass control to the next middleware (Vite) in development
-  app.get('*', (_req: Request, _res: Response, next: NextFunction) => {
+  app.get('*', (req: Request, res: Response, next: NextFunction) => {
+    // Make sure this doesn't interfere with API routes
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ message: "API endpoint not found" });
+    }
     next();
   });
 

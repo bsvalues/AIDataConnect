@@ -22,10 +22,16 @@ app.use(errorLogger);
     await startFtpServer();
     logger.info("FTP server started successfully on port 2121");
 
-    // Setup Vite or static serving BEFORE API routes in development
-    // This ensures Vite serves the client properly but API routes still work
+    // Create HTTP server
     const server = createServer(app);
     
+    // Register API routes BEFORE Vite middleware to ensure they're matched first
+    logger.info("Registering Express routes...");
+    await registerRoutes(app, server);
+    logger.info("Express routes registered successfully");
+    
+    // Setup Vite or static serving AFTER API routes
+    // This ensures API routes get priority over Vite serving
     if (app.get("env") === "development") {
       logger.info("Setting up Vite middleware...");
       await setupVite(app, server);
@@ -33,11 +39,6 @@ app.use(errorLogger);
     } else {
       serveStatic(app);
     }
-    
-    // Register API routes after Vite in development
-    logger.info("Registering Express routes...");
-    await registerRoutes(app, server);
-    logger.info("Express routes registered successfully");
 
     // Error handling middleware
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
