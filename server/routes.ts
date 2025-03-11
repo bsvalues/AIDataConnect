@@ -193,6 +193,31 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
   
   app.get("/api/auth/me", async (req, res) => {
     try {
+      // If not authenticated and we're in development, auto-login as admin
+      const isDevEnvironment = process.env.NODE_ENV !== 'production';
+      if (isDevEnvironment && (!req.session || !req.session.userId)) {
+        // Find the admin user
+        const adminUser = await storage.getUserByUsername('admin');
+        if (adminUser) {
+          // Set user session to admin
+          req.session.userId = adminUser.id;
+          
+          // Save the session
+          await new Promise<void>((resolve, reject) => {
+            req.session.save((err) => {
+              if (err) {
+                logger.error('Auto-login session save error:', err);
+                reject(err);
+              } else {
+                logger.info('Development auto-login activated for admin user');
+                resolve();
+              }
+            });
+          });
+        }
+      }
+      
+      // Regular authentication check (now possibly with auto-logged in user)
       if (!req.session || !req.session.userId) {
         return res.status(401).json({ message: "Not authenticated" });
       }
