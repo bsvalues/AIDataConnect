@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, ApiError, queryClient } from "@/lib/queryClient";
@@ -35,13 +35,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Switch
+} from "@/components/ui/switch"; 
 import { 
   Server, 
   Database, 
   ClipboardCopy, 
   Lock, 
   User,
-  Info
+  Info,
+  Zap
 } from "lucide-react";
 
 // Define the login schema
@@ -55,6 +59,34 @@ export default function Login() {
   const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [showDemo, setShowDemo] = useState(false);
+  const [autoLoginEnabled, setAutoLoginEnabled] = useState(false);
+  const isDevMode = import.meta.env.MODE === 'development';
+
+  // Check and load auto-login setting from localStorage on component mount
+  useEffect(() => {
+    const disableAutoLogin = localStorage.getItem('disable-auto-login');
+    setAutoLoginEnabled(!disableAutoLogin);
+  }, []);
+
+  // Toggle the auto-login setting
+  const toggleAutoLogin = (enabled: boolean) => {
+    if (enabled) {
+      localStorage.removeItem('disable-auto-login');
+      toast({
+        title: "Auto-login enabled",
+        description: "You'll be automatically logged in as admin in development mode",
+      });
+    } else {
+      localStorage.setItem('disable-auto-login', 'true');
+      toast({
+        title: "Auto-login disabled",
+        description: "Manual login will be required even in development mode",
+      });
+    }
+    setAutoLoginEnabled(enabled);
+    // Refresh to apply the change
+    queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+  };
 
   // Define form with validation
   const form = useForm<z.infer<typeof loginSchema>>({
@@ -237,6 +269,32 @@ export default function Login() {
         </CardContent>
 
         <CardFooter className="flex flex-col space-y-4 border-t pt-4">
+          {isDevMode && (
+            <div className="flex items-center justify-between p-2 bg-muted/40 rounded mb-2">
+              <div className="flex items-center space-x-2">
+                <Zap className="h-4 w-4 text-yellow-500" />
+                <span className="text-sm">Development auto-login</span>
+              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <Switch 
+                        checked={autoLoginEnabled} 
+                        onCheckedChange={toggleAutoLogin} 
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {autoLoginEnabled 
+                      ? "Disable automatic admin login" 
+                      : "Enable automatic admin login"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
+          
           <div className="text-sm text-center text-muted-foreground flex items-center justify-center">
             <Server className="h-4 w-4 mr-2" />
             Don't have an account?

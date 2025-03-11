@@ -55,10 +55,24 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
+  // For development, you can automatically set a mock user for testing
+  // The default mock user will automatically be used when running in development mode
+  const isDevMode = import.meta.env.MODE === 'development';
+  
   // Check if user is logged in
   const { data, isLoading: queryLoading } = useQuery({
     queryKey: ['/api/auth/me'],
     queryFn: async () => {
+      // For development, return a default admin user without making an API call
+      if (isDevMode && !localStorage.getItem('disable-auto-login')) {
+        console.log('Dev mode: Using auto-login with mock admin user');
+        return {
+          id: 1,
+          username: 'admin',
+          email: 'admin@example.com'
+        };
+      }
+      
       try {
         const response = await apiRequest('GET', '/api/auth/me');
         return await response.json();
