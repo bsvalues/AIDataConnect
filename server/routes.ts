@@ -193,31 +193,41 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
   
   app.get("/api/auth/me", async (req, res) => {
     try {
-      // If not authenticated and we're in development, auto-login as admin
+      // For development, automatically return the admin user without requiring login
       const isDevEnvironment = process.env.NODE_ENV !== 'production';
-      if (isDevEnvironment && (!req.session || !req.session.userId)) {
-        // Find the admin user
-        const adminUser = await storage.getUserByUsername('admin');
-        if (adminUser) {
-          // Set user session to admin
-          req.session.userId = adminUser.id;
+      
+      if (isDevEnvironment) {
+        // Find or create the admin user
+        let adminUser = await storage.getUserByUsername('admin');
+        
+        if (!adminUser) {
+          // Create a default admin user if it doesn't exist
+          const defaultUser = {
+            username: 'admin',
+            password: hashPassword('password'),
+            email: 'admin@example.com',
+            createdAt: new Date(),
+          };
           
-          // Save the session
-          await new Promise<void>((resolve, reject) => {
-            req.session.save((err) => {
-              if (err) {
-                logger.error('Auto-login session save error:', err);
-                reject(err);
-              } else {
-                logger.info('Development auto-login activated for admin user');
-                resolve();
-              }
-            });
-          });
+          adminUser = await storage.createUser(defaultUser);
+          logger.info('Created default admin user for auto-login');
         }
+        
+        // Set session for subsequent requests
+        if (req.session) {
+          req.session.userId = adminUser.id;
+          req.session.save();
+        }
+        
+        // Remove password from response
+        const { password, ...userWithoutPassword } = adminUser;
+        logger.info(`Auto-login successful for admin user (ID: ${adminUser.id})`);
+        
+        // Return admin user directly
+        return res.json(userWithoutPassword);
       }
       
-      // Regular authentication check (now possibly with auto-logged in user)
+      // For production, perform regular authentication check
       if (!req.session || !req.session.userId) {
         return res.status(401).json({ message: "Not authenticated" });
       }
@@ -232,6 +242,7 @@ export async function registerRoutes(app: Express, server: Server): Promise<Serv
       
       res.json(userWithoutPassword);
     } catch (error) {
+      logger.error('Error in /api/auth/me endpoint:', error);
       res.status(500).json({ message: handleError(error) });
     }
   });
